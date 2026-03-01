@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="description" content="Warehouse management webpage">
+    <meta name="keywords" content="management">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="rgb(45, 45, 50)">
+    <link rel="icon" href="/static/images/Icon.svg">
+    <link rel="shortcut icon" href="/static/images/Icon.svg">
+    <link rel="stylesheet" type="text/css" href="/static/css/dist/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Moderustic:wght@300..800&display=swap">
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js"></script>
+    <title>Warehouse management</title>
+</head>
+<body>
+
+<header class="top_bar" hx-boost="true">
+    <a href="/" class="top_link">
+        <img src="/static/images/Icon.svg" alt="Icon" class="top_image">
+        <span class="top_text">Warehouse management</span>
+    </a>
+    <div class="top_login_box">
+        {{ auth }}
+    </div>
+</header>
+
+<p class="text-5xl text-center p-16">
+    {{ error }}
+</p>
+
+</body>
+</html>
