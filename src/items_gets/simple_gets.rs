@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::response::Html;
+use axum::response::{Html, IntoResponse, Redirect};
 use axum_extra::extract::CookieJar;
 use sqlx::PgPool;
 use tokio::fs::File;
@@ -27,17 +27,12 @@ pub async fn read_file_to_string(buf: &PathBuf) -> Result<String, Error> {
 }
 
 pub async fn replace_in_html(body: String, tag: &str, val: &str) -> String {
-	let pattern = format!("{{{{ {tag} }}}}");
+	let pattern = format!("<!--{{{tag}}}-->");
 	body.replace(&pattern, val)
 }
 
-async fn get_final_html(
-	file_name: &PathBuf,
-	jar: CookieJar,
-	state: Arc<SharedStateStruct>
-) -> String {
-	let main_body = read_file_to_string(file_name).await.unwrap();
-	let auth = match jar.get("SECURITY-COOKIE") {
+pub async fn is_log_in(jar: &CookieJar, state: &Arc<SharedStateStruct>) -> bool {
+	match jar.get("SECURITY-COOKIE") {
 		Some(val) => {
 			let val = val.value();
 			let result = sqlx::query("SELECT user_id FROM web_page.cookies WHERE cookie = $1")
@@ -46,41 +41,62 @@ async fn get_final_html(
 				.await.unwrap();
 			
 			match result {
-				Some(_) => read_file_to_string(&PathBuf::from("templates/auth_status/auth.html")).await.unwrap(),
-				None => read_file_to_string(&PathBuf::from("templates/auth_status/not_auth.html")).await.unwrap()
+				Some(_) => true,
+				None => false
 			}
 		}
-		None => read_file_to_string(&PathBuf::from("templates/auth_status/not_auth.html")).await.unwrap()
-	};
-	replace_in_html(main_body, "auth", auth.as_str()).await
+		None => false
+	}
+}
+
+async fn add_log_out(page: String, is_log_in: bool) -> String {
+	if is_log_in {
+		let auth = read_file_to_string(&PathBuf::from("templates/auth.html")).await.unwrap();
+		return replace_in_html(page, "auth", auth.as_ref()).await
+	}
+	page
 }
 
 pub async fn home(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>
-) -> Html<String> {
-	Html(get_final_html(&PathBuf::from("templates/index.html"), jar, state).await)
+) -> (StatusCode, Html<String>) {
+	let is_log_in = is_log_in(&jar, &state).await;
+	if !is_log_in {
+		return fallback(jar, State(state)).await
+	}
+	(StatusCode::OK, Html(read_file_to_string(&PathBuf::from("templates/index.html")).await.unwrap()))
 }
 
 pub async fn login(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>
-) -> Html<String> {
-	Html(get_final_html(&PathBuf::from("templates/login.html"), jar, state).await)
+) -> impl IntoResponse {
+	let is_log_in = is_log_in(&jar, &state).await;
+	if is_log_in {
+		return Err(Redirect::to("/"))
+	}
+	Ok(Html(read_file_to_string(&PathBuf::from("templates/login.html")).await.unwrap()))
 }
 
 pub async fn registration(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>
-) -> Html<String> {
-	Html(get_final_html(&PathBuf::from("templates/registration.html"), jar, state).await)
+) -> (StatusCode, Html<String>) {
+	let is_log_in = is_log_in(&jar, &state).await;
+	if !is_log_in {
+		return fallback(jar, State(state)).await
+	}
+	(StatusCode::OK, Html(read_file_to_string(&PathBuf::from("templates/registration.html")).await.unwrap()))
 }
 
 pub async fn fallback(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>
 ) -> (StatusCode, Html<String>) {
-	let page = get_final_html(&PathBuf::from("templates/error.html"), jar, state).await;
+	let is_log_in = is_log_in(&jar, &state).await;
+	let page = read_file_to_string(&PathBuf::from("templates/error.html")).await.unwrap();
+	let page = add_log_out(page, is_log_in).await;
 	let page = replace_in_html(page, "error", "Not found").await;
 	(StatusCode::NOT_FOUND, Html(page))
 }
@@ -89,7 +105,9 @@ pub async fn bad_request(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>
 ) -> (StatusCode, Html<String>) {
-	let page = get_final_html(&PathBuf::from("templates/error.html"), jar, state).await;
+	let is_log_in = is_log_in(&jar, &state).await;
+	let page = read_file_to_string(&PathBuf::from("templates/error.html")).await.unwrap();
+	let page = add_log_out(page, is_log_in).await;
 	let page = replace_in_html(page, "error", "Bad request").await;
 	(StatusCode::BAD_REQUEST, Html(page))
 }

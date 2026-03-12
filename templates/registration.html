@@ -20,32 +20,43 @@
 <header class="top_bar" hx-boost="true">
 	<a href="/" class="top_link">
 		<img src="/static/images/Icon.svg" alt="Icon" class="top_image">
-		<span class="top_text">Warehouse management</span>
+		<span class="top_text">Управление складом</span>
 	</a>
-	<div class="top_login_box">
-		{{ auth }}
-	</div>
+	<a href="/logout" class="top_link ml-auto">
+        <span class="top_login_text">
+            Log out
+        </span>
+	</a>
 </header>
 
-<div class="log_box">
-	<h1 class="main_text">
-		Registration
-	</h1>
-	<form name="logForm" method="post" hx-boost="true">
-		<div>
-			<label>
-				<input class="input_box" id="email" name="email" type="email" autocomplete="email" placeholder="Email">
-			</label>
-		</div>
-		<div>
-			<label>
-				<input class="input_box" id="password" name="password" type="password" autocomplete="password" placeholder="Password">
-			</label>
-		</div>
-		<button class="input_button border border-solid border-gray-300">
+<div class="fixed bg-[rgb(40,40,45)] w-40 h-1/1">
+	<ul class="text-2xl">
+		<li class="mt-3 pb-3 border-b border-b-[rgb(85,85,95)] text-center"><a href="/receipts">Чеки</a></li>
+		<li class="mt-3 pb-3 border-b border-b-[rgb(85,85,95)] text-center"><a href="/books">Книги</a></li>
+		<li class="mt-3 pb-3 border-b border-b-[rgb(85,85,95)] text-center"><a href="/reservations">Брони</a></li>
+	</ul>
+</div>
+<div class="ml-40">
+	<div class="log_box">
+		<h1 class="main_text">
 			Registration
-		</button>
-	</form>
+		</h1>
+		<form name="logForm" method="post" hx-boost="true">
+			<div>
+				<label>
+					<input class="input_box" id="email" name="email" type="email" autocomplete="email" placeholder="Email">
+				</label>
+			</div>
+			<div>
+				<label>
+					<input class="input_box" id="password" name="password" type="password" autocomplete="password" placeholder="Password">
+				</label>
+			</div>
+			<button class="input_button border border-solid border-gray-300">
+				Registration
+			</button>
+		</form>
+	</div>
 </div>
 
 </body>

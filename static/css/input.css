@@ -40,11 +40,6 @@ body {
 }
 
 
-.top_login_box {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-}
 .top_login_text {
     font-size: large;
     padding: 6px 12px;
