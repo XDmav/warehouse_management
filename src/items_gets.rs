@@ -7,9 +7,10 @@ use axum::extract::{Path, State};
 use axum::http::{header, StatusCode};
 use axum::response::{Html, IntoResponse};
 use axum_extra::extract::CookieJar;
+use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 
-use crate::items_gets::simple_gets::{bad_request, fallback, SharedStateStruct, get_file, read_file_to_string};
+use crate::items_gets::simple_gets::{bad_request, fallback, SharedStateStruct, read_file_to_string};
 
 pub async fn get_image(
 	jar: CookieJar,
@@ -28,7 +29,7 @@ pub async fn get_image(
 		Some(name) => name,
 		None => return Err(bad_request(jar, State(state)).await)
 	};
-	let file = match get_file(&buf).await {
+	let file = match File::open(&buf).await {
 		Ok(file) => file,
 		Err(_) => return Err(fallback(jar, State(state)).await)
 	};

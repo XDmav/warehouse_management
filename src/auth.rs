@@ -14,7 +14,7 @@ use serde::Deserialize;
 use sqlx::Row;
 use time::OffsetDateTime;
 
-use crate::items_gets::simple_gets::{login, registration, SharedStateStruct};
+use crate::items_gets::simple_gets::{check_permission, fallback, get_user, login, registration, SharedStateStruct};
 
 #[derive(Deserialize)]
 pub struct UserInfo {
@@ -99,6 +99,16 @@ pub async fn post_registration(
 	State(state): State<Arc<SharedStateStruct>>,
 	Form(payload): Form<UserInfo>
 ) -> impl IntoResponse {
+	let user_id = get_user(&jar, &state).await;
+	match user_id {
+		Some(user_id) => {
+			if !check_permission(&state, user_id, "REG").await {
+				return Err(fallback(jar, State(state)).await)
+			}
+		},
+		None => return Err(fallback(jar, State(state)).await)
+	}
+	
 	if !EmailAddress::is_valid(&payload.email) {
 		return Err(registration(jar, State(state)).await)
 	}
@@ -123,7 +133,7 @@ pub async fn post_registration(
 				.await;
 			
 			match result {
-				Ok(_) => Ok(Redirect::to("/login")),
+				Ok(_) => Ok(registration(jar, State(state)).await),
 				Err(_) => Err(registration(jar, State(state)).await)
 			}
 		}
