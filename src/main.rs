@@ -1,8 +1,9 @@
-mod items_gets;
-mod auth;
+mod auth_posts;
+mod pages_gets;
+mod useful_funcs;
 
 use axum::{http::StatusCode, routing::get, {serve, Router}};
-use sqlx::{postgres::PgPoolOptions};
+use sqlx::postgres::PgPoolOptions;
 use std::{sync::Arc, time::Duration};
 use tokio::{fs::File, io::AsyncReadExt, net::TcpListener};
 use tower::ServiceBuilder;
@@ -10,9 +11,11 @@ use tower_http::{compression::CompressionLayer, timeout::TimeoutLayer, trace::Tr
 use tracing::Level;
 use tracing_subscriber::fmt;
 
-use crate::items_gets::simple_gets::{fallback, home, login, registration, SharedStateStruct};
-use crate::items_gets::{get_image, get_script, get_style};
-use crate::auth::{logout, post_login, post_registration};
+use pages_gets::errors::{fallback};
+use pages_gets::static_gets::{get_image, get_script, get_style};
+use pages_gets::{home, login, logout, registration, stats};
+use auth_posts::{post_login, post_registration};
+use useful_funcs::SharedStateStruct;
 
 #[tokio::main]
 async fn main() {
@@ -38,9 +41,10 @@ async fn main() {
     
     let app = Router::new()
         .route("/", get(home))
-        .route("/static/images/{name}", get(get_image))
-        .route("/static/css/dist/{name}", get(get_style))
-        .route("/static/js/{name}", get(get_script))
+        .route("/{*name}", get(stats))
+        .route("/static/images/{*name}", get(get_image))
+        .route("/static/css/dist/{*name}", get(get_style))
+        .route("/static/js/{*name}", get(get_script))
         .route("/login", get(login).post(post_login))
         .route("/registration", get(registration).post(post_registration))
         .route("/logout", get(logout))
@@ -56,5 +60,8 @@ async fn main() {
     
     let listen_adr = text_vec[1];
     let listener = TcpListener::bind(listen_adr).await.unwrap();
+    
+    tracing::info!("Listening on {}", listen_adr);
+    
     serve(listener, app).await.unwrap();
 }
