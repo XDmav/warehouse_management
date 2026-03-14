@@ -21,7 +21,7 @@ pub async fn get_image(
 		return Err(bad_request(jar, State(state)).await.into_response());
 	}
 	
-	let mut buf = PathBuf::from("../../static/images");
+	let mut buf = PathBuf::from("static/images");
 	buf.push(&sanitized_name);
 	
 	let filename = match buf.file_name() {
@@ -60,7 +60,7 @@ pub async fn get_style(
 		return Err(bad_request(jar, State(state)).await.into_response());
 	}
 	
-	let mut buf = PathBuf::from("../../static/css/dist");
+	let mut buf = PathBuf::from("static/css/dist");
 	buf.push(&name);
 	
 	let headers = [(header::CONTENT_TYPE, "text/css".to_string())];
@@ -82,7 +82,7 @@ pub async fn get_script(
 		return Err(bad_request(jar, State(state)).await.into_response());
 	}
 	
-	let mut buf = PathBuf::from("../../static/js");
+	let mut buf = PathBuf::from("static/js");
 	buf.push(&name);
 	
 	let headers = [(header::CONTENT_TYPE, "text/javascript".to_string())];

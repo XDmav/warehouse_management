@@ -168,7 +168,7 @@ pub async fn stats_goods(
 		.unwrap();
 	
 	let rows = sqlx::query(
-		"SELECT g.name, SUM(ri.quantity*ri.price) as revenue
+		"SELECT g.name, SUM(ri.quantity*ri.price)::float8 as revenue
          FROM receipt_items ri
          JOIN goods g ON g.goods_id = ri.goods_id
          GROUP BY g.goods_id
