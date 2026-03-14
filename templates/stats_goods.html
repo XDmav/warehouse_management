@@ -39,26 +39,49 @@
 </div>
 
 <div class="ml-40 p-8">
-    <h1 class="text-3xl mb-6">Общая статистика системы</h1>
+    <h1 class="text-3xl mb-6">Аналитика товаров</h1>
     
-    <div class="grid grid-cols-3 gap-6">
+    <h2 class="text-2xl mb-4">Самые прибыльные товары</h2>
+    
+    <div class="bg-[rgb(50,50,55)] p-4 rounded">
         
-        <div class="p-4 bg-[rgb(50,50,55)] rounded">
-            <h2>Количество чеков</h2>
-            <div class="text-3xl"><!--{receipts}--></div>
-        </div>
-        
-        <div class="p-4 bg-[rgb(50,50,55)] rounded">
-            <h2>Общий доход</h2>
-            <div class="text-3xl"><!--{revenue}--></div>
-        </div>
-        
-        <div class="p-4 bg-[rgb(50,50,55)] rounded">
-            <h2>Количество товаров</h2>
-            <div class="text-3xl"><!--{goods}--></div>
-        </div>
+        <ul class="list-disc ml-6">
+            <!--{goods_revenue}-->
+        </ul>
     
     </div>
+    
+    <h2 class="text-2xl mt-10 mb-4">Статистика товаров</h2>
+    
+    <table class="table-auto w-full">
+        
+        <thead>
+        <tr>
+            <th>Показатель</th>
+            <th>Значение</th>
+        </tr>
+        </thead>
+        
+        <tbody>
+        
+        <tr>
+            <td>Всего товаров</td>
+            <td><!--{goods_total}--></td>
+        </tr>
+        
+        <tr>
+            <td>Товаров с продажами</td>
+            <td><!--{goods_with_sales}--></td>
+        </tr>
+        
+        <tr>
+            <td>Средняя цена товара</td>
+            <td><!--{avg_price}--></td>
+        </tr>
+        
+        </tbody>
+    
+    </table>
 </div>
 
 </body>

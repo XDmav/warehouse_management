@@ -13,7 +13,7 @@ use tracing_subscriber::fmt;
 
 use pages_gets::errors::{fallback};
 use pages_gets::static_gets::{get_image, get_script, get_style};
-use pages_gets::{home, login, logout, registration, stats};
+use pages_gets::{home, login, logout, registration, stats, stats_goods, stats_sales, stats_warehouse};
 use auth_posts::{post_login, post_registration};
 use useful_funcs::SharedStateStruct;
 
@@ -41,13 +41,20 @@ async fn main() {
     
     let app = Router::new()
         .route("/", get(home))
-        .route("/{*name}", get(stats))
+        
+        .route("/stats", get(stats))
+        .route("/stats/sales", get(stats_sales))
+        .route("/stats/goods", get(stats_goods))
+        .route("/stats/warehouse", get(stats_warehouse))
+        
         .route("/static/images/{*name}", get(get_image))
         .route("/static/css/dist/{*name}", get(get_style))
         .route("/static/js/{*name}", get(get_script))
+        
         .route("/login", get(login).post(post_login))
         .route("/registration", get(registration).post(post_registration))
         .route("/logout", get(logout))
+        
         .fallback(fallback)
         .with_state(shared_state)
         .layer(

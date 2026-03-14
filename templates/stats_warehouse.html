@@ -39,26 +39,53 @@
 </div>
 
 <div class="ml-40 p-8">
-    <h1 class="text-3xl mb-6">Общая статистика системы</h1>
+    <h1 class="text-3xl mb-6">Складская аналитика</h1>
     
-    <div class="grid grid-cols-3 gap-6">
+    <div class="grid grid-cols-2 gap-6">
         
-        <div class="p-4 bg-[rgb(50,50,55)] rounded">
-            <h2>Количество чеков</h2>
+        <div class="bg-[rgb(50,50,55)] p-4 rounded">
+            <h2>Поступления товаров</h2>
             <div class="text-3xl"><!--{receipts}--></div>
         </div>
         
-        <div class="p-4 bg-[rgb(50,50,55)] rounded">
-            <h2>Общий доход</h2>
-            <div class="text-3xl"><!--{revenue}--></div>
-        </div>
-        
-        <div class="p-4 bg-[rgb(50,50,55)] rounded">
-            <h2>Количество товаров</h2>
-            <div class="text-3xl"><!--{goods}--></div>
+        <div class="bg-[rgb(50,50,55)] p-4 rounded">
+            <h2>Акты списания</h2>
+            <div class="text-3xl"><!--{writeoffs}--></div>
         </div>
     
     </div>
+    
+    <h2 class="text-2xl mt-10 mb-4">Дополнительная информация</h2>
+    
+    <table class="table-auto w-full">
+        
+        <thead>
+        <tr>
+            <th>Показатель</th>
+            <th>Значение</th>
+        </tr>
+        </thead>
+        
+        <tbody>
+        
+        <tr>
+            <td>Товаров на складе</td>
+            <td><!--{stock_goods}--></td>
+        </tr>
+        
+        <tr>
+            <td>Количество поставщиков</td>
+            <td><!--{suppliers}--></td>
+        </tr>
+        
+        <tr>
+            <td>Складов</td>
+            <td><!--{warehouses}--></td>
+        </tr>
+        
+        </tbody>
+    
+    </table>
 </div>
 
 </body>

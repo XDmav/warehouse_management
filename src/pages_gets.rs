@@ -4,10 +4,11 @@ use axum::extract::State;
 use axum::response::{Html, IntoResponse, Redirect};
 use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
+use sqlx::Row;
 use time::OffsetDateTime;
 
 use crate::pages_gets::errors::fallback;
-use crate::useful_funcs::{check_permission, get_user, read_file_to_string, SharedStateStruct};
+use crate::useful_funcs::{check_permission, get_user, read_file_to_string, replace_in_html, SharedStateStruct};
 
 pub mod static_gets;
 pub mod errors;
@@ -80,7 +81,152 @@ pub async fn stats(
 		return Err(Redirect::to("/login"))
 	}
 	
-	let page = read_file_to_string(&PathBuf::from("templates/stats.html")).await.unwrap();
+	let mut page = read_file_to_string(&PathBuf::from("templates/stats.html"))
+		.await
+		.unwrap();
+	
+	let receipts: i64 = sqlx::query("SELECT COUNT(*) as count FROM receipts")
+		.fetch_one(&state.pool)
+		.await
+		.unwrap()
+		.get("count");
+	
+	let revenue: Option<f64> = sqlx::query("SELECT SUM(quantity*price*(1-discount/100.0)) as sum FROM receipt_items")
+		.fetch_one(&state.pool)
+		.await
+		.unwrap()
+		.try_get("sum")
+		.ok();
+	
+	let goods: i64 = sqlx::query("SELECT COUNT(*) as count FROM goods")
+		.fetch_one(&state.pool)
+		.await
+		.unwrap()
+		.get("count");
+	
+	page = replace_in_html(page,"receipts",&receipts.to_string()).await;
+	
+	page = replace_in_html(page,"revenue",&format!("{:.2}", revenue.unwrap_or(0.0))).await;
+	
+	page = replace_in_html(page,"goods", &goods.to_string()).await;
+	
+	Ok(Html(page))
+}
+
+pub async fn stats_sales(
+	jar: CookieJar,
+	State(state): State<Arc<SharedStateStruct>>
+) -> impl IntoResponse {
+	let user_id = get_user(&jar, &state).await;
+	if user_id.is_none() {
+		return Err(Redirect::to("/login"))
+	}
+	
+	let mut page = read_file_to_string(&PathBuf::from("templates/stats_sales.html"))
+		.await
+		.unwrap();
+	
+	let rows = sqlx::query(
+		"SELECT g.name, SUM(ri.quantity) as sold
+         FROM receipt_items ri
+         JOIN goods g ON g.goods_id = ri.goods_id
+         GROUP BY g.goods_id
+         ORDER BY sold DESC
+         LIMIT 10"
+	)
+		.fetch_all(&state.pool)
+		.await
+		.unwrap();
+	
+	let mut list = String::new();
+	
+	for r in rows {
+		let name: String = r.get("name");
+		let sold: i64 = r.get("sold");
+		
+		list.push_str(
+			&format!("<li>{} — {} шт.</li>", name, sold)
+		);
+	}
+	
+	page = replace_in_html(page,"top_goods",&list).await;
+	
+	Ok(Html(page))
+}
+
+pub async fn stats_goods(
+	jar: CookieJar,
+	State(state): State<Arc<SharedStateStruct>>
+) -> impl IntoResponse {
+	let user_id = get_user(&jar, &state).await;
+	if user_id.is_none() {
+		return Err(Redirect::to("/login"))
+	}
+	
+	let mut page = read_file_to_string(&PathBuf::from("templates/stats_goods.html"))
+		.await
+		.unwrap();
+	
+	let rows = sqlx::query(
+		"SELECT g.name, SUM(ri.quantity*ri.price) as revenue
+         FROM receipt_items ri
+         JOIN goods g ON g.goods_id = ri.goods_id
+         GROUP BY g.goods_id
+         ORDER BY revenue DESC
+         LIMIT 10"
+	)
+		.fetch_all(&state.pool)
+		.await
+		.unwrap();
+	
+	let mut list = String::new();
+	
+	for r in rows {
+		let name: String = r.get("name");
+		let revenue: f64 = r.get("revenue");
+		
+		list.push_str(
+			&format!("<li>{} — {:.2}</li>", name, revenue)
+		);
+	}
+	
+	page = replace_in_html(page,"goods_revenue",&list).await;
+	
+	Ok(Html(page))
+}
+
+pub async fn stats_warehouse(
+	jar: CookieJar,
+	State(state): State<Arc<SharedStateStruct>>
+) -> impl IntoResponse {
+	let user_id = get_user(&jar, &state).await;
+	if user_id.is_none() {
+		return Err(Redirect::to("/login"))
+	}
+	
+	let mut page = read_file_to_string(&PathBuf::from("templates/stats_warehouse.html"))
+		.await
+		.unwrap();
+	
+	let receipts: i64 = sqlx::query(
+		"SELECT COUNT(*) as count FROM goods_receipts"
+	)
+		.fetch_one(&state.pool)
+		.await
+		.unwrap()
+		.get("count");
+	
+	let writeoffs: i64 = sqlx::query(
+		"SELECT COUNT(*) as count FROM writeoff_acts"
+	)
+		.fetch_one(&state.pool)
+		.await
+		.unwrap()
+		.get("count");
+	
+	page = replace_in_html(page,"receipts",&receipts.to_string()).await;
+	
+	page = replace_in_html(page,"writeoffs",&writeoffs.to_string()).await;
 	
 	Ok(Html(page))
 }
