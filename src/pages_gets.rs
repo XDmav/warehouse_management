@@ -120,11 +120,8 @@ pub async fn stats_sales(
 		return Err(Redirect::to("/login"))
 	}
 	
-	let mut page = read_file_to_string(
-		&PathBuf::from("templates/stats_sales.html")
-	).await.unwrap();
+	let mut page = read_file_to_string(&PathBuf::from("templates/stats_sales.html")).await.unwrap();
 	
-	// топ товаров
 	let rows = sqlx::query(
 		"SELECT g.name, SUM(ri.quantity) as sold
          FROM receipt_items ri
@@ -149,8 +146,35 @@ pub async fn stats_sales(
 		));
 	}
 	
+	let rows = sqlx::query(
+	"SELECT
+		    to_char(date_trunc('month', r.receipt_date),'YYYY-MM') AS month,
+		    SUM(ri.quantity * ri.price * (1 - ri.discount/100.0))::float8 AS revenue
+		FROM receipts r
+		JOIN receipt_items ri ON ri.receipt_id = r.receipt_id
+		GROUP BY month
+		ORDER BY month DESC
+		LIMIT 12"
+	)
+		.fetch_all(&state.pool)
+		.await
+		.unwrap();
+	
+	let mut monthly_stats = String::new();
+	
+	for r in rows {
+		let month: String = r.get("month");
+		let revenue: f64 = r.get("revenue");
+		
+		monthly_stats.push_str(&format!(
+			"<li>{} — {:.2}</li>",
+			month,
+			revenue
+		));
+	}
+	
 	let avg_check: f64 = sqlx::query(
-		"SELECT COALESCE(AVG(total)::float8,0) as avg
+	"SELECT COALESCE(AVG(total)::float8,0) as avg
          FROM (
              SELECT SUM(quantity*price*(1-discount/100.0)) as total
              FROM receipt_items
@@ -162,25 +186,20 @@ pub async fn stats_sales(
 		.unwrap()
 		.get("avg");
 	
-	let items_sold: i64 = sqlx::query(
-		"SELECT COALESCE(SUM(quantity),0) as sum
-         FROM receipt_items"
-	)
+	let items_sold: i64 = sqlx::query("SELECT COALESCE(SUM(quantity),0) as sum FROM receipt_items")
 		.fetch_one(&state.pool)
 		.await
 		.unwrap()
 		.get("sum");
 	
-	let orders_count: i64 = sqlx::query(
-		"SELECT COUNT(*) as count
-         FROM orders"
-	)
+	let orders_count: i64 = sqlx::query("SELECT COUNT(*) as count FROM orders")
 		.fetch_one(&state.pool)
 		.await
 		.unwrap()
 		.get("count");
 	
 	page = replace_in_html(page,"top_goods",&list).await;
+	page = replace_in_html(page,"monthly_revenue", &monthly_stats).await;
 	page = replace_in_html(page,"avg_check",&format!("{:.2}",avg_check)).await;
 	page = replace_in_html(page,"items_sold",&items_sold.to_string()).await;
 	page = replace_in_html(page,"orders_count",&orders_count.to_string()).await;
@@ -197,13 +216,11 @@ pub async fn stats_goods(
 		return Err(Redirect::to("/login"))
 	}
 	
-	let mut page = read_file_to_string(
-		&PathBuf::from("templates/stats_goods.html")
-	).await.unwrap();
+	let mut page = read_file_to_string(&PathBuf::from("templates/stats_goods.html")).await.unwrap();
 	
 	let rows = sqlx::query(
-		"SELECT g.name,
-                SUM(ri.quantity*ri.price)::float8 as revenue
+	"SELECT g.name,
+            SUM(ri.quantity*ri.price)::float8 as revenue
          FROM receipt_items ri
          JOIN goods g ON g.goods_id = ri.goods_id
          GROUP BY g.goods_id
@@ -226,33 +243,108 @@ pub async fn stats_goods(
 		));
 	}
 	
-	let goods_total: i64 = sqlx::query(
-		"SELECT COUNT(*) as count FROM goods"
+	let rows = sqlx::query(
+	"SELECT g.name,
+		    SUM(ri.quantity*ri.price)::float8 AS revenue
+		FROM receipt_items ri
+		JOIN goods g ON g.goods_id = ri.goods_id
+		GROUP BY g.goods_id
+		ORDER BY revenue DESC
+		LIMIT 20"
 	)
+		.fetch_all(&state.pool)
+		.await
+		.unwrap();
+	
+	let mut abc_list = String::new();
+	
+	let mut index = 0;
+	
+	for r in rows {
+		let name: String = r.get("name");
+		let revenue: f64 = r.get("revenue");
+		
+		let category =
+			if index < 5 {"A"}
+			else if index < 12 {"B"}
+			else {"C"};
+		
+		abc_list.push_str(&format!(
+			"<li>[{}] {} — {:.2}</li>",
+			category,
+			name,
+			revenue
+		));
+		
+		index += 1;
+	}
+	
+	let rows = sqlx::query(
+	"WITH sales AS (
+		    SELECT
+		        g.goods_id,
+		        g.name,
+		        date_trunc('month', r.receipt_date) AS month,
+		        SUM(ri.quantity) AS qty
+		    FROM receipt_items ri
+		    JOIN receipts r ON r.receipt_id = ri.receipt_id
+		    JOIN goods g ON g.goods_id = ri.goods_id
+		    GROUP BY g.goods_id, month
+		)
+		
+		SELECT
+		    s1.name,
+		    s1.qty AS current_month,
+		    s2.qty AS prev_month
+		FROM sales s1
+		JOIN sales s2
+		ON s1.goods_id = s2.goods_id
+		AND s1.month = date_trunc('month', now())
+		AND s2.month = date_trunc('month', now()) - interval '1 month'
+		WHERE s1.qty < s2.qty
+		ORDER BY (s2.qty - s1.qty) DESC
+		LIMIT 10"
+	)
+		.fetch_all(&state.pool)
+		.await
+		.unwrap();
+	
+	let mut falling_goods = String::new();
+	
+	for r in rows {
+		let name: String = r.get("name");
+		let now: i64 = r.get("current_month");
+		let prev: i64 = r.get("prev_month");
+		
+		falling_goods.push_str(&format!(
+			"<li>{} — {} → {}</li>",
+			name,
+			prev,
+			now
+		));
+	}
+	
+	let goods_total: i64 = sqlx::query("SELECT COUNT(*) as count FROM goods")
 		.fetch_one(&state.pool)
 		.await
 		.unwrap()
 		.get("count");
 	
-	let goods_with_sales: i64 = sqlx::query(
-		"SELECT COUNT(DISTINCT goods_id) as count
-         FROM receipt_items"
-	)
+	let goods_with_sales: i64 = sqlx::query("SELECT COUNT(DISTINCT goods_id) as count FROM receipt_items")
 		.fetch_one(&state.pool)
 		.await
 		.unwrap()
 		.get("count");
 	
-	let avg_price: f64 = sqlx::query(
-		"SELECT COALESCE(AVG(price)::float8,0) as avg
-         FROM goods"
-	)
+	let avg_price: f64 = sqlx::query("SELECT COALESCE(AVG(price)::float8,0) as avg FROM goods")
 		.fetch_one(&state.pool)
 		.await
 		.unwrap()
 		.get("avg");
 	
 	page = replace_in_html(page,"goods_revenue",&list).await;
+	page = replace_in_html(page,"abc_goods", &abc_list).await;
+	page = replace_in_html(page,"falling_goods", &falling_goods).await;
 	page = replace_in_html(page,"goods_total",&goods_total.to_string()).await;
 	page = replace_in_html(page,"goods_with_sales",&goods_with_sales.to_string()).await;
 	page = replace_in_html(page,"avg_price",&format!("{:.2}",avg_price)).await;
@@ -269,50 +361,33 @@ pub async fn stats_warehouse(
 		return Err(Redirect::to("/login"))
 	}
 	
-	let mut page = read_file_to_string(
-		&PathBuf::from("templates/stats_warehouse.html")
-	).await.unwrap();
+	let mut page = read_file_to_string(&PathBuf::from("templates/stats_warehouse.html")).await.unwrap();
 	
-	let receipts: i64 = sqlx::query(
-		"SELECT COUNT(*) as count
-         FROM goods_receipts"
-	)
+	let receipts: i64 = sqlx::query("SELECT COUNT(*) as count FROM goods_receipts")
 		.fetch_one(&state.pool)
 		.await
 		.unwrap()
 		.get("count");
 	
-	let writeoffs: i64 = sqlx::query(
-		"SELECT COUNT(*) as count
-         FROM writeoff_acts"
-	)
+	let writeoffs: i64 = sqlx::query("SELECT COUNT(*) as count FROM writeoff_acts")
 		.fetch_one(&state.pool)
 		.await
 		.unwrap()
 		.get("count");
 	
-	let stock_goods: i64 = sqlx::query(
-		"SELECT COUNT(*) as count
-         FROM goods"
-	)
+	let stock_goods: i64 = sqlx::query("SELECT COUNT(*) as count FROM goods")
 		.fetch_one(&state.pool)
 		.await
 		.unwrap()
 		.get("count");
 	
-	let suppliers: i64 = sqlx::query(
-		"SELECT COUNT(*) as count
-         FROM suppliers"
-	)
+	let suppliers: i64 = sqlx::query("SELECT COUNT(*) as count FROM suppliers")
 		.fetch_one(&state.pool)
 		.await
 		.unwrap()
 		.get("count");
 	
-	let warehouses: i64 = sqlx::query(
-		"SELECT COUNT(*) as count
-         FROM warehouses"
-	)
+	let warehouses: i64 = sqlx::query("SELECT COUNT(*) as count FROM warehouses")
 		.fetch_one(&state.pool)
 		.await
 		.unwrap()

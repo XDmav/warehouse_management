@@ -12,12 +12,14 @@ body {
 
 
 .top_bar {
+    position: fixed;
     display: flex;
     align-items: center;
     background-color: rgb(35, 35, 40);
     text-decoration: none;
     padding: 5px 20px;
     height: 70px;
+    width: 100%;
 }
 .top_link,
 .top_link:visited {
