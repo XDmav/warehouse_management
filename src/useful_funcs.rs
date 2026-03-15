@@ -33,10 +33,7 @@ pub async fn get_user(jar: &CookieJar, state: &Arc<SharedStateStruct>) -> Option
 				.fetch_one(&state.pool)
 				.await.unwrap();
 			
-			match result.try_get("user_id") {
-				Ok(user_id) => Some(user_id),
-				Err(_) => None
-			}
+			result.try_get("user_id").ok()
 		}
 		None => None
 	}

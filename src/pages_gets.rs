@@ -44,16 +44,13 @@ pub async fn logout(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>
 ) -> impl IntoResponse {
-	match jar.get("SECURITY-COOKIE") {
-		Some(val) => {
-			let val = val.value();
-			let _ = sqlx::query("DELETE FROM web_page.cookies WHERE cookie = $1")
-				.bind(val)
-				.execute(&state.pool)
-				.await;
-		}
-		_ => {}
-	};
+	if let Some(val) = jar.get("SECURITY-COOKIE") {
+        let val = val.value();
+        let _ = sqlx::query("DELETE FROM web_page.cookies WHERE cookie = $1")
+            .bind(val)
+            .execute(&state.pool)
+            .await;
+    };
 	
 	let mut cookie = Cookie::new("SECURITY-COOKIE", "");
 	cookie.set_secure(true);
@@ -258,9 +255,7 @@ pub async fn stats_goods(
 	
 	let mut abc_list = String::new();
 	
-	let mut index = 0;
-	
-	for r in rows {
+	for (index, r) in rows.into_iter().enumerate() {
 		let name: String = r.get("name");
 		let revenue: f64 = r.get("revenue");
 		
@@ -275,8 +270,6 @@ pub async fn stats_goods(
 			name,
 			revenue
 		));
-		
-		index += 1;
 	}
 	
 	let rows = sqlx::query(
@@ -398,6 +391,135 @@ pub async fn stats_warehouse(
 	page = replace_in_html(page,"stock_goods",&stock_goods.to_string()).await;
 	page = replace_in_html(page,"suppliers",&suppliers.to_string()).await;
 	page = replace_in_html(page,"warehouses",&warehouses.to_string()).await;
+	
+	Ok(Html(page))
+}
+
+pub async fn create_receipt_page(
+	jar: CookieJar,
+	State(state): State<Arc<SharedStateStruct>>
+) -> impl IntoResponse {
+	let user_id = get_user(&jar,&state).await;
+	
+	if user_id.is_none(){
+		return Err(Redirect::to("/login"))
+	}
+	
+	let mut page = read_file_to_string(&PathBuf::from("templates/receipt_create.html")).await.unwrap();
+	
+	let payment_rows = sqlx::query("SELECT payment_type FROM payment_types")
+		.fetch_all(&state.pool)
+		.await
+		.unwrap();
+	
+	let mut payment_html = String::new();
+	
+	for r in payment_rows {
+		let p:String = r.get("payment_type");
+		
+		payment_html.push_str(
+			&format!("<option value=\"{}\">{}</option>",p,p)
+		);
+	}
+	
+	let cashier_rows = sqlx::query("SELECT cashier_id,surname,first_name FROM cashiers")
+		.fetch_all(&state.pool)
+		.await
+		.unwrap();
+	
+	let mut cashier_html = String::new();
+	
+	for r in cashier_rows {
+		let id:i64 = r.get("cashier_id");
+		let name:String = r.get("surname");
+		let fname:String = r.get("first_name");
+		
+		cashier_html.push_str(
+			&format!(
+				"<option value=\"{}\">{} {}</option>",
+				id,name,fname
+			));
+	}
+	
+	let delivery_rows = sqlx::query("SELECT delivery_type FROM delivery_types")
+		.fetch_all(&state.pool)
+		.await
+		.unwrap();
+	
+	let mut delivery_html = String::new();
+	
+	for r in delivery_rows {
+		let d:String = r.get("delivery_type");
+		
+		delivery_html.push_str(
+			&format!("<option value=\"{}\">{}</option>",d,d)
+		);
+	}
+	
+	let store_rows = sqlx::query("SELECT store_id,address FROM stores")
+		.fetch_all(&state.pool)
+		.await
+		.unwrap();
+	
+	let mut store_html = String::new();
+	
+	for r in store_rows {
+		let id:i64 = r.get("store_id");
+		let addr:String = r.get("address");
+		
+		store_html.push_str(
+			&format!(
+				"<option value=\"{}\">{}</option>",
+				id,addr
+			));
+	}
+	
+	let goods_rows = sqlx::query("SELECT goods_id,name FROM goods ORDER BY name")
+		.fetch_all(&state.pool)
+		.await
+		.unwrap();
+	
+	let mut goods_html = String::new();
+	
+	for r in goods_rows {
+		let id:i64 = r.get("goods_id");
+		let name:String = r.get("name");
+		
+		goods_html.push_str(
+			&format!(
+				"<option value=\"{}\">{}</option>",
+				id,name
+			));
+	}
+	
+	let goods_rows = sqlx::query(
+		"SELECT goods_id,name,price::float8 FROM goods ORDER BY name"
+	)
+		.fetch_all(&state.pool)
+		.await
+		.unwrap();
+	
+	let mut goods_js = String::new();
+	
+	for r in goods_rows {
+		let id:i64 = r.get("goods_id");
+		let name:String = r.get("name");
+		let price:f64 = r.get("price");
+		
+		goods_js.push_str(
+			&format!(
+				"{{id:{},name:\"{}\",price:{}}},",
+				id,name.replace("\"",""),price
+			));
+		
+	}
+	
+	page = replace_in_html(page,"payment_types",&payment_html).await;
+	page = replace_in_html(page,"cashiers",&cashier_html).await;
+	page = replace_in_html(page,"delivery_types",&delivery_html).await;
+	page = replace_in_html(page,"stores",&store_html).await;
+	page = replace_in_html(page,"goods",&goods_html).await;
+	page = replace_in_html(page,"goods_js", &goods_js).await;
 	
 	Ok(Html(page))
 }

@@ -1,6 +1,7 @@
 mod auth_posts;
 mod pages_gets;
 mod useful_funcs;
+mod pages_posts;
 
 use axum::{http::StatusCode, routing::get, {serve, Router}};
 use sqlx::postgres::PgPoolOptions;
@@ -13,9 +14,10 @@ use tracing_subscriber::fmt;
 
 use pages_gets::errors::{fallback};
 use pages_gets::static_gets::{get_image, get_script, get_style};
-use pages_gets::{home, login, logout, registration, stats, stats_goods, stats_sales, stats_warehouse};
+use pages_gets::{home, login, logout, registration, stats, stats_goods, create_receipt_page, stats_sales, stats_warehouse};
 use auth_posts::{post_login, post_registration};
 use useful_funcs::SharedStateStruct;
+use pages_posts::create_receipt;
 
 #[tokio::main]
 async fn main() {
@@ -46,6 +48,9 @@ async fn main() {
         .route("/stats/sales", get(stats_sales))
         .route("/stats/goods", get(stats_goods))
         .route("/stats/warehouse", get(stats_warehouse))
+        
+        .route("/receipts", get(create_receipt_page).post(create_receipt))
+        .route("/receipts/new", get(create_receipt_page).post(create_receipt))
         
         .route("/static/images/{*name}", get(get_image))
         .route("/static/css/dist/{*name}", get(get_style))

@@ -44,7 +44,7 @@ pub async fn post_login(
 	
 	let parsed_hash = PasswordHash::new(hash).unwrap();
 	
-	if Argon2::default().verify_password(&payload.password.as_bytes(), &parsed_hash).is_err() {
+	if Argon2::default().verify_password(payload.password.as_bytes(), &parsed_hash).is_err() {
 		return Err(login(jar, State(state)).await)
 	}
 	
@@ -103,7 +103,7 @@ pub async fn post_registration(
 	}
 	
 	let password_hash = Argon2::default()
-		.hash_password(&payload.password.as_bytes())
+		.hash_password(payload.password.as_bytes())
 		.unwrap()
 		.to_string();
 	
