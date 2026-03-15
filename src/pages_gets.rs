@@ -489,32 +489,11 @@ pub async fn create_receipt_page(
 		goods_html.push_str(&format!("<option value=\"{}\">{}</option>", id, name));
 	}
 	
-	let goods_rows = sqlx::query("SELECT goods_id,name,price::float8 FROM goods ORDER BY name")
-		.fetch_all(&state.pool)
-		.await
-		.unwrap();
-	
-	let mut goods_js = String::new();
-	
-	for r in goods_rows {
-		let id: i64 = r.get("goods_id");
-		let name: String = r.get("name");
-		let price: f64 = r.get("price");
-		
-		goods_js.push_str(&format!(
-			"{{id:{},name:\"{}\",price:{}}},",
-			id,
-			name.replace("\"", ""),
-			price
-		));
-	}
-	
 	page = replace_in_html(page, "payment_types", &payment_html).await;
 	page = replace_in_html(page, "cashiers", &cashier_html).await;
 	page = replace_in_html(page, "delivery_types", &delivery_html).await;
 	page = replace_in_html(page, "stores", &store_html).await;
 	page = replace_in_html(page, "goods", &goods_html).await;
-	page = replace_in_html(page, "goods_js", &goods_js).await;
 	
 	Ok(Html(page))
 }

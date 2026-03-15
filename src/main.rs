@@ -2,6 +2,7 @@ mod auth_posts;
 mod pages_gets;
 mod pages_posts;
 mod useful_funcs;
+mod api;
 
 use axum::{
 	http::StatusCode,
@@ -25,6 +26,8 @@ use pages_gets::{
 };
 use pages_posts::create_receipt;
 use useful_funcs::SharedStateStruct;
+use api::goods_stock;
+use crate::api::goods_list;
 
 #[tokio::main]
 async fn main() {
@@ -60,6 +63,9 @@ async fn main() {
 		
 		.route("/receipts", get(create_receipt_page).post(create_receipt))
 		.route("/receipts/new", get(create_receipt_page).post(create_receipt))
+		
+		.route("/api/goods/{name}/stock", get(goods_stock))
+		.route("/api/goods", get(goods_list))
 		
 		.route("/static/images/{*name}", get(get_image))
 		.route("/static/css/dist/{*name}", get(get_style))

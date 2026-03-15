@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0", features = ["io"] }
-axum = { version = "0", features = ["http1", "http2", "form", "tokio"], default-features = false }
+axum = { version = "0", features = ["http1", "http2", "form", "json", "tokio"], default-features = false }
 axum-extra = { version = "0", features = ["cookie"], default-features = false }
 tower = { version = "0", features = ["limit"] }
 tower-http = { version = "0", features = ["timeout", "compression-full", "trace"] }
