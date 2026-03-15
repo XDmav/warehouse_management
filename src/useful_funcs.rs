@@ -1,13 +1,13 @@
+use axum_extra::extract::CookieJar;
+use sqlx::{PgPool, Row};
 use std::io::Error;
 use std::path::PathBuf;
 use std::sync::Arc;
-use axum_extra::extract::CookieJar;
-use sqlx::{PgPool, Row};
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 
 pub struct SharedStateStruct {
-	pub pool: PgPool
+	pub pool: PgPool,
 }
 
 pub async fn read_file_to_string(buf: &PathBuf) -> Result<String, Error> {
@@ -31,27 +31,38 @@ pub async fn get_user(jar: &CookieJar, state: &Arc<SharedStateStruct>) -> Option
 			let result = sqlx::query("SELECT user_id FROM web_page.cookies WHERE cookie = $1")
 				.bind(val)
 				.fetch_one(&state.pool)
-				.await.unwrap();
+				.await
+				.unwrap();
 			
 			result.try_get("user_id").ok()
 		}
-		None => None
+		None => None,
 	}
 }
 
-pub async fn check_permission(state: &Arc<SharedStateStruct>, user_id: i32, permission: &str) -> bool {
-	let result = sqlx::query("SELECT user_id FROM web_page.user_permissions WHERE user_id = $1 AND permission = $2")
-		.bind(user_id).bind(permission)
+pub async fn check_permission(
+	state: &Arc<SharedStateStruct>,
+	user_id: i32,
+	permission: &str,
+) -> bool {
+	let result = sqlx::query(
+		"SELECT user_id FROM web_page.user_permissions WHERE user_id = $1 AND permission = $2",
+	)
+		.bind(user_id)
+		.bind(permission)
 		.fetch_optional(&state.pool)
-		.await.unwrap();
+		.await
+		.unwrap();
 	
 	result.is_some()
 }
 
 pub async fn add_log_out(page: String, user_id: Option<i32>) -> String {
 	if user_id.is_some() {
-		let auth = read_file_to_string(&PathBuf::from("templates/auth.html")).await.unwrap();
-		return replace_in_html(page, "auth", auth.as_ref()).await
+		let auth = read_file_to_string(&PathBuf::from("templates/auth.html"))
+			.await
+			.unwrap();
+		return replace_in_html(page, "auth", auth.as_ref()).await;
 	}
 	page
 }

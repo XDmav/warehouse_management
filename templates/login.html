@@ -2,24 +2,24 @@
 <html lang="ru">
 <head>
 	<meta charset="UTF-8">
-	<meta name="description" content="Warehouse management webpage">
-	<meta name="keywords" content="management">
-	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<meta name="theme-color" content="rgb(45, 45, 50)">
-	<link rel="icon" href="/static/images/Icon.svg">
-	<link rel="shortcut icon" href="/static/images/Icon.svg">
-	<link rel="stylesheet" type="text/css" href="/static/css/dist/style.css">
-	<link rel="preconnect" href="https://fonts.googleapis.com">
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-	<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Moderustic:wght@300..800&display=swap">
+	<meta content="Warehouse management webpage" name="description">
+	<meta content="management" name="keywords">
+	<meta content="width=device-width, initial-scale=1" name="viewport">
+	<meta content="rgb(45, 45, 50)" name="theme-color">
+	<link href="/static/images/Icon.svg" rel="icon">
+	<link href="/static/images/Icon.svg" rel="shortcut icon">
+	<link href="/static/css/dist/style.css" rel="stylesheet" type="text/css">
+	<link href="https://fonts.googleapis.com" rel="preconnect">
+	<link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
+	<link href="https://fonts.googleapis.com/css2?family=Moderustic:wght@300..800&display=swap" rel="stylesheet">
 	<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js"></script>
 	<title>Warehouse management</title>
 </head>
 <body>
 
 <header class="top_bar" hx-boost="true">
-	<a href="/" class="top_link">
-		<img src="/static/images/Icon.svg" alt="Icon" class="top_image">
+	<a class="top_link" href="/">
+		<img alt="Icon" class="top_image" src="/static/images/Icon.svg">
 		<span class="top_text">Управление складом</span>
 	</a>
 </header>
@@ -29,15 +29,15 @@
 		<h1 class="main_text">
 			Login
 		</h1>
-		<form name="logForm" method="post" hx-boost="true">
+		<form hx-boost="true" method="post" name="logForm">
 			<div>
 				<label>
-					<input class="input_box" id="email" name="email" type="email" autocomplete="email" placeholder="Email">
+					<input autocomplete="email" class="input_box" id="email" name="email" placeholder="Email" type="email">
 				</label>
 			</div>
 			<div>
 				<label>
-					<input class="input_box" id="password" name="password" type="password" autocomplete="password" placeholder="Password">
+					<input autocomplete="password" class="input_box" id="password" name="password" placeholder="Password" type="password">
 				</label>
 			</div>
 			<button class="input_button border border-solid border-gray-300">

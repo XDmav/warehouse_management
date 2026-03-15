@@ -1,159 +1,159 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="description" content="Warehouse management webpage">
-    <meta name="keywords" content="management">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="rgb(45, 45, 50)">
-    <link rel="icon" href="/static/images/Icon.svg">
-    <link rel="shortcut icon" href="/static/images/Icon.svg">
-    <link rel="stylesheet" type="text/css" href="/static/css/dist/style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Moderustic:wght@300..800&display=swap">
-    <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js"></script>
-    <title>Warehouse management</title>
+	<meta charset="UTF-8">
+	<meta content="Warehouse management webpage" name="description">
+	<meta content="management" name="keywords">
+	<meta content="width=device-width, initial-scale=1" name="viewport">
+	<meta content="rgb(45, 45, 50)" name="theme-color">
+	<link href="/static/images/Icon.svg" rel="icon">
+	<link href="/static/images/Icon.svg" rel="shortcut icon">
+	<link href="/static/css/dist/style.css" rel="stylesheet" type="text/css">
+	<link href="https://fonts.googleapis.com" rel="preconnect">
+	<link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
+	<link href="https://fonts.googleapis.com/css2?family=Moderustic:wght@300..800&display=swap" rel="stylesheet">
+	<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js"></script>
+	<title>Warehouse management</title>
 </head>
 <body>
 
 <header class="top_bar" hx-boost="true">
-    <a href="/" class="top_link">
-        <img src="/static/images/Icon.svg" alt="Icon" class="top_image">
-        <span class="top_text">Управление складом</span>
-    </a>
-    <a href="/logout" class="top_link ml-auto">
+	<a class="top_link" href="/">
+		<img alt="Icon" class="top_image" src="/static/images/Icon.svg">
+		<span class="top_text">Управление складом</span>
+	</a>
+	<a class="top_link ml-auto" href="/logout">
         <span class="top_login_text">
             Log out
         </span>
-    </a>
+	</a>
 </header>
 
 <div class="fixed bg-[rgb(40,40,45)] mt-17.5 w-40 h-1/1">
-    <ul class="text-2xl">
-        <li class="mt-3 pb-3 border-b border-b-[rgb(85,85,95)] text-center"><a href="/stats">Общая аналитика</a></li>
-        <li class="mt-3 pb-3 border-b border-b-[rgb(85,85,95)] text-center"><a href="/stats/sales">Аналитика продаж</a></li>
-        <li class="mt-3 pb-3 border-b border-b-[rgb(85,85,95)] text-center"><a href="/stats/goods">Аналитика товаров</a></li>
-        <li class="mt-3 pb-3 border-b border-b-[rgb(85,85,95)] text-center"><a href="/stats/warehouse">Складская аналитика</a></li>
-    </ul>
+	<ul class="text-2xl">
+		<li class="mt-3 pb-3 border-b border-b-[rgb(85,85,95)] text-center"><a href="/stats">Общая аналитика</a></li>
+		<li class="mt-3 pb-3 border-b border-b-[rgb(85,85,95)] text-center"><a href="/stats/sales">Аналитика продаж</a></li>
+		<li class="mt-3 pb-3 border-b border-b-[rgb(85,85,95)] text-center"><a href="/stats/goods">Аналитика товаров</a></li>
+		<li class="mt-3 pb-3 border-b border-b-[rgb(85,85,95)] text-center"><a href="/stats/warehouse">Складская аналитика</a></li>
+	</ul>
 </div>
 
 <div class="ml-40 p-8">
-    <h1 class="text-2xl mb-6">Создание чека</h1>
-    
-    <form
-            hx-post="/receipts/create"
-            hx-target="#result"
-            hx-swap="innerHTML"
-            id="receiptForm">
-        
-        <div class="grid grid-cols-2 gap-4 mb-6">
-            <div>
-                <label>
-                    Дата
-                    <input
-                            type="date"
-                            name="receipt_date"
-                            id="receipt_date"
-                            class="border p-2 w-full"
-                            required>
-                </label>
-            </div>
-            
-            <div>
-                <label>
-                    Тип оплаты
-                    <select name="payment_type" class="border p-2 w-full">
-                        <!--{payment_types}-->
-                    </select>
-                </label>
-            </div>
-        </div>
-        
-        
-        <div class="grid grid-cols-2 gap-4 mb-6">
-            <div>
-                <label>
-                    Кассир
-                    <input
-                            type="text"
-                            placeholder="Поиск..."
-                            oninput="filterOptions(this,'cashier_select')"
-                            class="border p-2 w-full mb-1">
-                    <select
-                            name="cashier_id"
-                            id="cashier_select"
-                            class="border p-2 w-full">
-                        <!--{cashiers}-->
-                    </select>
-                </label>
-            </div>
-            
-            <div>
-                <label>
-                    Магазин
-                    <input
-                            type="text"
-                            placeholder="Поиск..."
-                            oninput="filterOptions(this,'store_select')"
-                            class="border p-2 w-full mb-1">
-                    <select
-                            name="store_id"
-                            id="store_select"
-                            class="border p-2 w-full">
-                        <!--{stores}-->
-                    </select>
-                </label>
-            </div>
-        </div>
-        
-        <h2 class="text-xl mb-2">Товары</h2>
-        
-        <table class="w-full border mb-4">
-            <thead>
-            <tr class="border">
-                <th>Товар</th>
-                <th>Количество</th>
-                <th>Цена</th>
-                <th>Скидка %</th>
-                <th>Сумма</th>
-                <th></th>
-            </tr>
-            </thead>
-            
-            <tbody id="items">
-            </tbody>
-        </table>
-        
-        <button
-                type="button"
-                onclick="addItem()"
-                class="bg-green-600 text-white px-3 py-1 mb-4">
-            Добавить товар
-        </button>
-        
-        <div class="text-xl mb-4">
-            Итого: <span id="total">0</span>
-        </div>
-        
-        <button type="submit" class="bg-blue-600 text-white px-6 py-2">
-            Создать чек
-        </button>
-    </form>
-    
-    <div id="result" class="mt-4"></div>
+	<h1 class="text-2xl mb-6">Создание чека</h1>
+	
+	<form
+			hx-post="/receipts/create"
+			hx-swap="innerHTML"
+			hx-target="#result"
+			id="receiptForm">
+		
+		<div class="grid grid-cols-2 gap-4 mb-6">
+			<div>
+				<label>
+					Дата
+					<input
+							class="border p-2 w-full"
+							id="receipt_date"
+							name="receipt_date"
+							required
+							type="date">
+				</label>
+			</div>
+			
+			<div>
+				<label>
+					Тип оплаты
+					<select class="border p-2 w-full" name="payment_type">
+						<!--{payment_types}-->
+					</select>
+				</label>
+			</div>
+		</div>
+		
+		
+		<div class="grid grid-cols-2 gap-4 mb-6">
+			<div>
+				<label>
+					Кассир
+					<input
+							class="border p-2 w-full mb-1"
+							oninput="filterOptions(this,'cashier_select')"
+							placeholder="Поиск..."
+							type="text">
+					<select
+							class="border p-2 w-full"
+							id="cashier_select"
+							name="cashier_id">
+						<!--{cashiers}-->
+					</select>
+				</label>
+			</div>
+			
+			<div>
+				<label>
+					Магазин
+					<input
+							class="border p-2 w-full mb-1"
+							oninput="filterOptions(this,'store_select')"
+							placeholder="Поиск..."
+							type="text">
+					<select
+							class="border p-2 w-full"
+							id="store_select"
+							name="store_id">
+						<!--{stores}-->
+					</select>
+				</label>
+			</div>
+		</div>
+		
+		<h2 class="text-xl mb-2">Товары</h2>
+		
+		<table class="w-full border mb-4">
+			<thead>
+			<tr class="border">
+				<th>Товар</th>
+				<th>Количество</th>
+				<th>Цена</th>
+				<th>Скидка %</th>
+				<th>Сумма</th>
+				<th></th>
+			</tr>
+			</thead>
+			
+			<tbody id="items">
+			</tbody>
+		</table>
+		
+		<button
+				class="bg-green-600 text-white px-3 py-1 mb-4"
+				onclick="addItem()"
+				type="button">
+			Добавить товар
+		</button>
+		
+		<div class="text-xl mb-4">
+			Итого: <span id="total">0</span>
+		</div>
+		
+		<button class="bg-blue-600 text-white px-6 py-2" type="submit">
+			Создать чек
+		</button>
+	</form>
+	
+	<div class="mt-4" id="result"></div>
 </div>
 
 <script>
-    
+
     let goods = [
         <!--{goods_js}-->
     ];
-    
-    function addItem(){
-        
+
+    function addItem() {
+
         let row = document.createElement("tr");
-        
+
         row.innerHTML = `
 <td>
 
@@ -165,7 +165,7 @@ class="border p-1 mb-1">
 
 <select name="goods_id" onchange="updatePrice(this)" class="border p-1 goods_select">
 
-${goods.map(g=>`<option value="${g.id}" data-price="${g.price}">${g.name}</option>`).join("")}
+${goods.map(g => `<option value="${g.id}" data-price="${g.price}">${g.name}</option>`).join("")}
 
 </select>
 
@@ -197,110 +197,110 @@ class="border p-1 w-20">
 <button type="button" onclick="removeRow(this)">✕</button>
 </td>
 `;
-        
+
         document.getElementById("items").appendChild(row);
-        
+
         updatePrice(row.querySelector("select"));
-        
+
     }
-    
-    
-    function removeRow(btn){
-        
+
+
+    function removeRow(btn) {
+
         btn.closest("tr").remove();
-        
+
         updateTotal();
-        
+
     }
-    
-    
-    function updatePrice(select){
-        
+
+
+    function updatePrice(select) {
+
         let price = select.selectedOptions[0].dataset.price;
-        
+
         let row = select.closest("tr");
-        
+
         row.querySelector("input[name='price']").value = price;
-        
+
         updateRow(select);
-        
+
     }
-    
-    
-    function updateRow(el){
-        
+
+
+    function updateRow(el) {
+
         let row = el.closest("tr");
-        
+
         let qty = parseFloat(row.querySelector("[name=quantity]").value) || 0;
-        
+
         let price = parseFloat(row.querySelector("[name=price]").value) || 0;
-        
+
         let discount = parseFloat(row.querySelector("[name=discount]").value) || 0;
-        
-        let sum = qty * price * (1 - discount/100);
-        
+
+        let sum = qty * price * (1 - discount / 100);
+
         row.querySelector(".row_total").innerText = sum.toFixed(2);
-        
+
         updateTotal();
-        
+
     }
-    
-    
-    function updateTotal(){
-        
+
+
+    function updateTotal() {
+
         let total = 0;
-        
-        document.querySelectorAll(".row_total").forEach(e=>{
-            
+
+        document.querySelectorAll(".row_total").forEach(e => {
+
             total += parseFloat(e.innerText) || 0;
-            
+
         });
-        
+
         document.getElementById("total").innerText = total.toFixed(2);
-        
+
     }
-    
-    
-    function filterOptions(input,selectId){
-        
+
+
+    function filterOptions(input, selectId) {
+
         let filter = input.value.toLowerCase();
-        
+
         let options = document.getElementById(selectId).options;
-        
-        for(let o of options){
-            
+
+        for (let o of options) {
+
             o.style.display =
-                    o.text.toLowerCase().includes(filter) ? "" : "none";
-            
+                o.text.toLowerCase().includes(filter) ? "" : "none";
+
         }
-        
+
     }
-    
-    
-    function filterGoods(input){
-        
+
+
+    function filterGoods(input) {
+
         let filter = input.value.toLowerCase();
-        
+
         let select = input.nextElementSibling;
-        
-        for(let o of select.options){
-            
+
+        for (let o of select.options) {
+
             o.style.display =
-                    o.text.toLowerCase().includes(filter) ? "" : "none";
-            
+                o.text.toLowerCase().includes(filter) ? "" : "none";
+
         }
-        
+
     }
-    
-    
+
+
     // текущая дата
-    
+
     document.getElementById("receipt_date").value =
-            new Date().toISOString().slice(0,10);
-    
-    
+        new Date().toISOString().slice(0, 10);
+
+
     // первая строка
-    
+
     addItem();
 
 </script>
