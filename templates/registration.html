@@ -22,11 +22,13 @@
 		<img alt="Icon" class="top_image" src="/static/images/Icon.svg">
 		<span class="top_text">Управление складом</span>
 	</a>
-	<a class="top_link ml-auto" href="/logout">
+	<form action="/logout" class="ml-auto" hx-boost="true" method="post">
+		<button class="top_link" type="submit">
         <span class="top_login_text">
             Log out
         </span>
-	</a>
+		</button>
+	</form>
 </header>
 
 <div class="fixed bg-[rgb(40,40,45)] mt-17.5 w-40 h-1/1">

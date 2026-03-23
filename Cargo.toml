@@ -20,7 +20,8 @@ email_address = { version = "0", default-features = false }
 time = { version = "0", features = ["serde"], default-features = false }
 tracing-subscriber = { version = "0", features = ["std", "fmt"], default-features = false }
 tracing = { version = "0", default-features = false }
-sanitize-filename = "0"
+sanitize-filename = { version = "0", default-features = false }
+html-escape = { version = "0", default-features = false }
 
 [profile.release]
 strip = "symbols"

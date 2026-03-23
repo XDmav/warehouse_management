@@ -6,6 +6,26 @@ async function loadGoods() {
     goods = await res.json();
 }
 
+function filterOptions(input, selectId) {
+    const filter = input.value.toLowerCase().trim();
+    const select = document.getElementById(selectId);
+
+    if (!select) return;
+
+    for (const option of select.options) {
+        const text = option.text.toLowerCase();
+        option.style.display = text.includes(filter) ? "" : "none";
+    }
+
+    const firstVisible = Array.from(select.options).find(
+        option => option.style.display !== "none"
+    );
+
+    if (firstVisible) {
+        select.value = firstVisible.value;
+    }
+}
+
 function addItem() {
     let row = document.createElement("tr");
 

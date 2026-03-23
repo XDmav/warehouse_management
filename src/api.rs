@@ -4,6 +4,7 @@ use axum::Json;
 use serde::Serialize;
 use sqlx::Row;
 use std::sync::Arc;
+use axum::http::StatusCode;
 use axum_extra::extract::CookieJar;
 use crate::useful_funcs::{get_user, SharedStateStruct};
 
@@ -20,7 +21,7 @@ pub async fn goods_stock(
     let user_id = get_user(&jar, &state).await;
     
     if user_id.is_none() {
-        return Err(());
+        return Err((StatusCode::UNAUTHORIZED, "Unauthorized"));
     }
     
     let row = sqlx::query(
@@ -52,7 +53,7 @@ pub async fn goods_list(
     let user_id = get_user(&jar, &state).await;
     
     if user_id.is_none() {
-        return Err(());
+        return Err((StatusCode::UNAUTHORIZED, "Unauthorized"));
     }
     
     let rows = sqlx::query("SELECT goods_id,name,price::float8 FROM goods ORDER BY name")

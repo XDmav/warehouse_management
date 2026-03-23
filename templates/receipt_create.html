@@ -23,11 +23,13 @@
 		<img alt="Icon" class="top_image" src="/static/images/Icon.svg">
 		<span class="top_text">Управление складом</span>
 	</a>
-	<a class="top_link ml-auto" href="/logout">
+	<form action="/logout" class="ml-auto" hx-boost="true" method="post">
+		<button class="top_link" type="submit">
         <span class="top_login_text">
             Log out
         </span>
-	</a>
+		</button>
+	</form>
 </header>
 
 <div class="fixed bg-[rgb(40,40,45)] mt-17.5 w-40 h-1/1">
@@ -39,108 +41,136 @@
 	</ul>
 </div>
 
-<div class="ml-40 p-8">
-	<h1 class="text-2xl mb-6">Создание чека</h1>
+<div class="ml-40 p-8 pt-20">
+	<h1 class="text-3xl mb-6">Создание чека</h1>
 	
 	<form
+			id="receiptForm"
 			hx-post="/receipts/new"
-			hx-swap="innerHTML"
 			hx-target="#result"
-			id="receiptForm">
-		
-		<div class="grid grid-cols-2 gap-4 mb-6">
+			hx-swap="innerHTML"
+			class="space-y-6"
+	>
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 			<div>
-				<label>
-					Дата
-					<input
-							class="border p-2 w-full"
-							id="receipt_date"
-							name="receipt_date"
-							required
-							type="date">
-				</label>
+				<label class="block mb-2" for="receipt_date">Дата</label>
+				<input
+						class="border p-2 w-full"
+						id="receipt_date"
+						name="receipt_date"
+						required
+						type="date"
+				>
 			</div>
 			
 			<div>
-				<label>
-					Тип оплаты
-					<select class="border p-2 w-full" name="payment_type">
-						<!--{payment_types}-->
-					</select>
-				</label>
+				<label class="block mb-2" for="payment_type">Тип оплаты</label>
+				<select
+						class="border p-2 w-full bg-[rgb(50,50,55)]"
+						id="payment_type"
+						name="payment_type"
+						required
+				>
+					<!--{payment_types}-->
+				</select>
 			</div>
 		</div>
 		
-		
-		<div class="grid grid-cols-2 gap-4 mb-6">
+		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 			<div>
+				<label class="block mb-2" for="cashier_search">Кассир</label>
+				<input
+						class="border p-2 w-full mb-2"
+						id="cashier_search"
+						oninput="filterOptions(this,'cashier_select')"
+						placeholder="Поиск..."
+						type="text"
+				>
 				<label>
-					Кассир
-					<input
-							class="border p-2 w-full mb-1"
-							oninput="filterOptions(this,'cashier_select')"
-							placeholder="Поиск..."
-							type="text">
 					<select
-							class="border p-2 w-full"
+							class="border p-2 w-full bg-[rgb(50,50,55)]"
 							id="cashier_select"
-							name="cashier_id">
+							name="cashier_id"
+							required
+					>
 						<!--{cashiers}-->
 					</select>
 				</label>
 			</div>
 			
 			<div>
+				<label class="block mb-2" for="delivery_type">Способ получения</label>
+				<select
+						class="border p-2 w-full bg-[rgb(50,50,55)]"
+						id="delivery_type"
+						name="delivery_type"
+						required
+				>
+					<!--{delivery_types}-->
+				</select>
+			</div>
+			
+			<div>
+				<label class="block mb-2" for="store_search">Магазин</label>
+				<input
+						class="border p-2 w-full mb-2"
+						id="store_search"
+						oninput="filterOptions(this,'store_select')"
+						placeholder="Поиск..."
+						type="text"
+				>
 				<label>
-					Магазин
-					<input
-							class="border p-2 w-full mb-1"
-							oninput="filterOptions(this,'store_select')"
-							placeholder="Поиск..."
-							type="text">
 					<select
-							class="border p-2 w-full"
+							class="border p-2 w-full bg-[rgb(50,50,55)]"
 							id="store_select"
-							name="store_id">
+							name="store_id"
+					>
+						<option value="">Не выбран</option>
 						<!--{stores}-->
 					</select>
 				</label>
 			</div>
 		</div>
 		
-		<h2 class="text-xl mb-2">Товары</h2>
-		
-		<table class="w-full border mb-4">
-			<thead>
-			<tr class="border">
-				<th>Товар</th>
-				<th>Остаток</th>
-				<th>Количество</th>
-				<th>Цена</th>
-				<th>Скидка %</th>
-				<th>Сумма</th>
-				<th></th>
-			</tr>
-			</thead>
+		<div>
+			<h2 class="text-2xl mb-3">Товары</h2>
 			
-			<tbody id="items">
-			</tbody>
-		</table>
-		
-		<button
-				class="bg-green-600 text-white px-3 py-1 mb-4"
-				onclick="addItem()"
-				type="button">
-			Добавить товар
-		</button>
-		
-		<div class="text-xl mb-4">
-			Итого: <span id="total">0</span>
+			<div class="overflow-x-auto">
+				<table class="w-full border mb-4">
+					<thead>
+					<tr class="border">
+						<th class="p-2">Товар</th>
+						<th class="p-2">Остаток</th>
+						<th class="p-2">Количество</th>
+						<th class="p-2">Цена</th>
+						<th class="p-2">Скидка %</th>
+						<th class="p-2">Сумма</th>
+						<th class="p-2"></th>
+					</tr>
+					</thead>
+					<tbody id="items"></tbody>
+				</table>
+			</div>
+			
+			<button
+					class="bg-green-600 text-white px-4 py-2"
+					onclick="addItem()"
+					type="button"
+			>
+				Добавить товар
+			</button>
 		</div>
 		
-		<button class="bg-blue-600 text-white px-6 py-2" type="submit">
-			Создать чек
-		</button>
+		<div class="text-2xl">
+			Итого: <span id="total">0.00</span>
+		</div>
+		
+		<div class="flex items-center gap-3">
+			<button class="bg-blue-600 text-white px-6 py-2" type="submit">
+				Создать чек
+			</button>
+			<span class="text-sm opacity-80">После добавления позиции проверь остаток и итоговую сумму.</span>
+		</div>
 	</form>
 	
 	<div class="mt-4" id="result"></div>

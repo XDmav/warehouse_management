@@ -1,3 +1,4 @@
+use std::ops::DerefMut;
 use crate::useful_funcs::{get_user, SharedStateStruct};
 use axum::extract::State;
 use axum::response::{Html, IntoResponse, Redirect};
@@ -6,6 +7,7 @@ use axum_extra::extract::CookieJar;
 use serde::Deserialize;
 use sqlx::Row;
 use std::sync::Arc;
+use axum::http::StatusCode;
 use time::Date;
 
 #[derive(Deserialize)]
@@ -30,8 +32,21 @@ pub async fn create_receipt(
 	let user_id = get_user(&jar, &state).await;
 	
 	if user_id.is_none() {
-		return Err(Redirect::to("/login"));
+		return Err(Redirect::to("/login").into_response());
 	}
+	
+	if data.goods_id.is_empty()
+		|| data.goods_id.len() != data.quantity.len()
+		|| data.goods_id.len() != data.price.len()
+		|| data.goods_id.len() != data.discount.len()
+	{
+		return Err((StatusCode::BAD_REQUEST, Html("Некорректные данные чека")).into_response());
+	}
+	
+	let mut tx = match state.pool.begin().await {
+		Ok(tx) => tx,
+		Err(_) => return Err((StatusCode::INTERNAL_SERVER_ERROR, Html("Ошибка при создании")).into_response()),
+	};
 	
 	let rec = sqlx::query(
 		"INSERT INTO receipts
@@ -44,12 +59,12 @@ pub async fn create_receipt(
 		.bind(data.cashier_id)
 		.bind(&data.delivery_type)
 		.bind(data.store_id)
-		.fetch_one(&state.pool)
+		.fetch_one(tx.deref_mut())
 		.await;
 	
 	let rec = match rec {
 		Ok(rec) => rec,
-		Err(e) => return Ok(Html(e.to_string())),
+		Err(_) => return Err((StatusCode::INTERNAL_SERVER_ERROR, Html("Ошибка при создании")).into_response()),
 	};
 	
 	let receipt_id: i64 = rec.get("receipt_id");
@@ -65,12 +80,17 @@ pub async fn create_receipt(
 			.bind(data.quantity[i])
 			.bind(data.price[i])
 			.bind(data.discount[i])
-			.execute(&state.pool)
+			.execute(tx.deref_mut())
 			.await;
 		
 		if result.is_err() {
-			return Ok(Html("Ошибка при создании".to_string()));
+			return Err((StatusCode::INTERNAL_SERVER_ERROR, Html("Ошибка при создании")).into_response());
 		}
+	}
+	
+	let result = tx.commit().await;
+	if result.is_err() {
+		return Err((StatusCode::INTERNAL_SERVER_ERROR, Html("Ошибка при создании")).into_response());
 	}
 	
 	Ok(Html("Чек успешно создан".to_string()))

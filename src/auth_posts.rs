@@ -2,7 +2,7 @@ use argon2::{password_hash::PasswordHasher, Argon2, PasswordHash, PasswordVerifi
 use axum::extract::State;
 use axum::response::{IntoResponse, Redirect};
 use axum::Form;
-use axum_extra::extract::cookie::Cookie;
+use axum_extra::extract::cookie::{Cookie, SameSite};
 use axum_extra::extract::CookieJar;
 use base16ct::lower;
 use email_address::EmailAddress;
@@ -12,9 +12,9 @@ use serde::Deserialize;
 use sqlx::Row;
 use std::sync::Arc;
 use std::time::Duration;
+use axum::http::StatusCode;
 use time::OffsetDateTime;
 
-use crate::pages_gets::errors::fallback;
 use crate::pages_gets::{login, registration};
 use crate::useful_funcs::{check_permission, get_user, SharedStateStruct};
 
@@ -68,13 +68,37 @@ pub async fn post_login(
 	
 	let mut cookie = Cookie::new("SECURITY-COOKIE", cookie);
 	cookie.set_secure(true);
+	cookie.set_http_only(true);
+	cookie.set_same_site(SameSite::Lax);
+	cookie.set_path("/");
 	
 	let mut now = OffsetDateTime::now_utc();
-	now += Duration::new(31104000, 0);
+	now += Duration::new(60 * 60 * 24 * 30, 0);
 	
 	cookie.set_expires(now);
 	
 	Ok((jar.add(cookie), Redirect::to("/")))
+}
+
+pub async fn logout(
+	jar: CookieJar,
+	State(state): State<Arc<SharedStateStruct>>,
+) -> impl IntoResponse {
+	if let Some(val) = jar.get("SECURITY-COOKIE") {
+		let val = val.value();
+		let _ = sqlx::query("DELETE FROM web_page.cookies WHERE cookie = $1")
+			.bind(val)
+			.execute(&state.pool)
+			.await;
+	};
+	
+	let mut cookie = Cookie::new("SECURITY-COOKIE", "");
+	cookie.set_secure(true);
+	cookie.set_http_only(true);
+	cookie.set_same_site(SameSite::Lax);
+	cookie.set_path("/");
+	cookie.set_expires(OffsetDateTime::UNIX_EPOCH);
+	(jar.add(cookie), Redirect::to("/login"))
 }
 
 pub async fn post_registration(
@@ -86,10 +110,10 @@ pub async fn post_registration(
 	match user_id {
 		Some(user_id) => {
 			if !check_permission(&state, user_id, "REG").await {
-				return Err(fallback(jar, State(state)).await.into_response());
+				return Err((StatusCode::UNAUTHORIZED, "Unauthorized").into_response());
 			}
 		}
-		None => return Err(fallback(jar, State(state)).await.into_response()),
+		None => return Err((StatusCode::UNAUTHORIZED, "Unauthorized").into_response()),
 	}
 	
 	if !EmailAddress::is_valid(&payload.email) {
