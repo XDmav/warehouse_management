@@ -1,7 +1,7 @@
 use std::ops::DerefMut;
-use crate::useful_funcs::{get_user, SharedStateStruct};
+use crate::useful_funcs::{check_permission, get_user, SharedStateStruct};
 use axum::extract::State;
-use axum::response::{Html, IntoResponse, Redirect};
+use axum::response::{Html, IntoResponse};
 use axum::Form;
 use axum_extra::extract::CookieJar;
 use serde::Deserialize;
@@ -30,9 +30,13 @@ pub async fn create_receipt(
 	Form(data): Form<CreateReceipt>,
 ) -> impl IntoResponse {
 	let user_id = get_user(&jar, &state).await;
-	
-	if user_id.is_none() {
-		return Err(Redirect::to("/login").into_response());
+	match user_id {
+		Some(user_id) => {
+			if !check_permission(&state, user_id, "CREATE").await {
+				return Err((StatusCode::UNAUTHORIZED, "Unauthorized").into_response());
+			}
+		}
+		None => return Err((StatusCode::UNAUTHORIZED, "Unauthorized").into_response()),
 	}
 	
 	if data.goods_id.is_empty()

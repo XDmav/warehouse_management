@@ -4,7 +4,6 @@ use axum_extra::extract::CookieJar;
 use sqlx::Row;
 use std::path::PathBuf;
 use std::sync::Arc;
-
 use crate::pages_gets::errors::unauthorized;
 use crate::useful_funcs::{check_permission, get_user, read_file_to_string, replace_text_in_html, SharedStateStruct};
 
@@ -443,9 +442,13 @@ pub async fn create_receipt_page(
 	State(state): State<Arc<SharedStateStruct>>,
 ) -> impl IntoResponse {
 	let user_id = get_user(&jar, &state).await;
-	
-	if user_id.is_none() {
-		return Err(Redirect::to("/login"));
+	match user_id {
+		Some(user_id) => {
+			if !check_permission(&state, user_id, "CREATE").await {
+				return Err(Redirect::to("/login"));
+			}
+		}
+		None => return Err(Redirect::to("/login")),
 	}
 	
 	let mut page = read_file_to_string(&PathBuf::from("templates/receipt_create.html"))
