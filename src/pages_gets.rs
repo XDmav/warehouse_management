@@ -5,7 +5,7 @@ use sqlx::Row;
 use std::path::PathBuf;
 use std::sync::Arc;
 use crate::pages_gets::errors::unauthorized;
-use crate::useful_funcs::{check_permission, get_user, read_file_to_string, replace_text_in_html, SharedStateStruct};
+use crate::useful_funcs::{check_permission, get_user, read_file_to_string, replace_html_in_html, replace_text_in_html, SharedStateStruct};
 
 pub mod errors;
 pub mod static_gets;
@@ -182,8 +182,8 @@ pub async fn stats_sales(
 		.unwrap()
 		.get("count");
 	
-	page = replace_text_in_html(page, "top_goods", &list).await;
-	page = replace_text_in_html(page, "monthly_revenue", &monthly_stats).await;
+	page = replace_html_in_html(page, "top_goods", &list).await;
+	page = replace_html_in_html(page, "monthly_revenue", &monthly_stats).await;
 	page = replace_text_in_html(page, "avg_check", &format!("{:.2}", avg_check)).await;
 	page = replace_text_in_html(page, "items_sold", &items_sold.to_string()).await;
 	page = replace_text_in_html(page, "orders_count", &orders_count.to_string()).await;
@@ -375,9 +375,9 @@ pub async fn stats_goods(
 		.unwrap()
 		.get("avg");
 	
-	page = replace_text_in_html(page, "goods_revenue", &list).await;
-	page = replace_text_in_html(page, "abc_goods", &abc_list).await;
-	page = replace_text_in_html(page, "falling_goods", &falling_goods).await;
+	page = replace_html_in_html(page, "goods_revenue", &list).await;
+	page = replace_html_in_html(page, "abc_goods", &abc_list).await;
+	page = replace_html_in_html(page, "falling_goods", &falling_goods).await;
 	page = replace_text_in_html(page, "goods_total", &goods_total.to_string()).await;
 	page = replace_text_in_html(page, "goods_with_sales", &goods_with_sales.to_string()).await;
 	page = replace_text_in_html(page, "avg_price", &format!("{:.2}", avg_price)).await;

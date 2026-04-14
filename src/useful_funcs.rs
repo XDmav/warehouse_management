@@ -6,6 +6,7 @@ use std::sync::Arc;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use html_escape::encode_safe;
+use tracing::log::{debug, trace};
 
 pub struct SharedStateStruct {
 	pub pool: PgPool,
@@ -49,7 +50,7 @@ pub async fn check_permission(
 	permission: &str,
 ) -> bool {
 	sqlx::query(
-		"SELECT user_id FROM web_page.user_permissions WHERE user_id = $1 AND permission = $2",
+		"SELECT user_id FROM web_page.users_permissions WHERE user_id = $1 AND permission = $2",
 	)
 		.bind(user_id)
 		.bind(permission)
