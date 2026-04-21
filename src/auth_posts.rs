@@ -12,11 +12,11 @@ use serde::Deserialize;
 use sqlx::Row;
 use std::sync::Arc;
 use std::time::Duration;
-use axum::http::StatusCode;
 use time::OffsetDateTime;
+use crate::app_error::{AppError, AppResult};
+use crate::useful_funcs::{check_permission, get_user, hash_cookie, SharedStateStruct};
 
-use crate::pages_gets::{login, registration};
-use crate::useful_funcs::{check_permission, get_user, SharedStateStruct};
+const DUMMY_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$ZHGJerRF83khoMUb52Jo2g$s7nwb02r25ThJjCCWgSEPmoWJVOUe3eD3QdfkBnitRM";
 
 #[derive(Deserialize)]
 pub struct UserInfo {
@@ -28,43 +28,45 @@ pub async fn post_login(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>,
 	Form(payload): Form<UserInfo>,
-) -> impl IntoResponse {
+) -> AppResult<impl IntoResponse> {
 	let account = sqlx::query("SELECT user_id, password_hash FROM web_page.users WHERE email = $1")
 		.bind(&payload.email)
 		.fetch_optional(&state.pool)
-		.await
-		.unwrap();
+		.await?;
 	
-	let account = match account {
-		Some(account) => account,
-		None => return Err(login(jar, State(state)).await),
+	let hash_string: String = match &account {
+		Some(acc) => acc.try_get("password_hash").map_err(|e| AppError::Internal(e.to_string()))?,
+		None => DUMMY_HASH.to_string(),
 	};
 	
-	let hash = account.get("password_hash");
+	let parsed_hash = PasswordHash::new(&hash_string)
+		.map_err(|e| AppError::Internal(format!("bad stored hash: {e}")))?;
 	
-	let parsed_hash = PasswordHash::new(hash).unwrap();
-	
-	if Argon2::default()
+	let password_ok = Argon2::default()
 		.verify_password(payload.password.as_bytes(), &parsed_hash)
-		.is_err()
-	{
-		return Err(login(jar, State(state)).await);
+		.is_ok();
+	
+	if account.is_none() || !password_ok {
+		return Ok(Redirect::to("/login?error=invalid").into_response());
 	}
+	
+	let account = account.unwrap();
+	let user_id: i32 = account
+		.try_get("user_id")
+		.map_err(|e| AppError::Internal(format!("column 'user_id': {e}")))?;
 	
 	let mut buf = [0; 64];
 	let mut rng: StdRng = rand::make_rng();
 	rng.fill_bytes(&mut buf);
 	
 	let cookie = lower::encode_string(&buf);
+	let cookie_hash = hash_cookie(&cookie);
 	
-	let id: i32 = account.get("user_id");
-	
-	sqlx::query("INSERT INTO web_page.cookies (cookie, user_id) VALUES ($1, $2)")
-		.bind(&cookie)
-		.bind(id)
+	sqlx::query("INSERT INTO web_page.cookies (cookie_hash, user_id) VALUES ($1, $2)")
+		.bind(&cookie_hash)
+		.bind(user_id)
 		.execute(&state.pool)
-		.await
-		.unwrap();
+		.await?;
 	
 	let mut cookie = Cookie::new("SECURITY-COOKIE", cookie);
 	cookie.set_secure(true);
@@ -77,17 +79,17 @@ pub async fn post_login(
 	
 	cookie.set_expires(now);
 	
-	Ok((jar.add(cookie), Redirect::to("/")))
+	Ok((jar.add(cookie), Redirect::to("/")).into_response())
 }
 
 pub async fn logout(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>,
-) -> impl IntoResponse {
+) -> AppResult<impl IntoResponse> {
 	if let Some(val) = jar.get("SECURITY-COOKIE") {
-		let val = val.value();
-		let _ = sqlx::query("DELETE FROM web_page.cookies WHERE cookie = $1")
-			.bind(val)
+		let hash = hash_cookie(val.value());
+		let _ = sqlx::query("DELETE FROM web_page.cookies WHERE cookie_hash = $1")
+			.bind(&hash)
 			.execute(&state.pool)
 			.await;
 	};
@@ -98,7 +100,7 @@ pub async fn logout(
 	cookie.set_same_site(SameSite::Lax);
 	cookie.set_path("/");
 	cookie.set_expires(OffsetDateTime::UNIX_EPOCH);
-	(jar.add(cookie), Redirect::to("/login"))
+	Ok((jar.add(cookie), Redirect::to("/login")))
 }
 
 pub async fn post_registration(
@@ -106,43 +108,45 @@ pub async fn post_registration(
 	State(state): State<Arc<SharedStateStruct>>,
 	Form(payload): Form<UserInfo>,
 ) -> impl IntoResponse {
-	let user_id = get_user(&jar, &state).await;
-	match user_id {
-		Some(user_id) => {
-			if !check_permission(&state, user_id, "REG").await {
-				return Err((StatusCode::UNAUTHORIZED, "Unauthorized").into_response());
-			}
-		}
-		None => return Err((StatusCode::UNAUTHORIZED, "Unauthorized").into_response()),
+	let user_id = get_user(&jar, &state)
+		.await
+		.ok_or(AppError::Unauthorized)?;
+	
+	if !check_permission(&state, user_id, "REG").await {
+		return Err(AppError::Unauthorized);
 	}
 	
 	if !EmailAddress::is_valid(&payload.email) {
-		return Err(registration(jar, State(state)).await.into_response());
+		return Ok(Redirect::to("/registration?error=invalid_email").into_response());
 	}
 	
+	let email = payload.email.trim().to_lowercase();
+	
 	let account = sqlx::query("SELECT user_id FROM web_page.users WHERE email = $1")
-		.bind(&payload.email)
+		.bind(&email)
 		.fetch_optional(&state.pool)
-		.await
-		.unwrap();
+		.await?;
 	
 	if account.is_some() {
-		return Err(registration(jar, State(state)).await.into_response());
+		return Ok(Redirect::to("/registration?error=email_taken").into_response());
 	}
 	
 	let password_hash = Argon2::default()
 		.hash_password(payload.password.as_bytes())
-		.unwrap()
+		.map_err(|e| AppError::Internal(format!("argon2 hash: {e}")))?
 		.to_string();
 	
 	let result = sqlx::query("INSERT INTO web_page.users(email, password_hash) VALUES ($1, $2)")
-		.bind(&payload.email)
+		.bind(&email)
 		.bind(password_hash)
 		.execute(&state.pool)
 		.await;
 	
 	match result {
-		Ok(_) => Ok(registration(jar, State(state)).await),
-		Err(_) => Err(registration(jar, State(state)).await.into_response()),
+		Ok(_) => Ok(Redirect::to("/registration?success=1").into_response()),
+		Err(sqlx::Error::Database(db)) if db.is_unique_violation() => {
+			Ok(Redirect::to("/registration?error=email_taken").into_response())
+		}
+		Err(e) => Err(AppError::Db(e)),
 	}
 }

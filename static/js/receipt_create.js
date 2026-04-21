@@ -1,169 +1,221 @@
+"use strict";
+
+// Кэш списка товаров, загруженный с сервера
 let goods = [];
 
 async function loadGoods() {
-    const res = await fetch("/api/goods");
+    try {
+        const res = await fetch("/api/goods", { credentials: "same-origin" });
+        if (!res.ok) {
+            showError(`Не удалось загрузить список товаров (код ${res.status})`);
+            return;
+        }
+        goods = await res.json();
+    } catch (e) {
+        showError("Ошибка сети при загрузке товаров");
+        console.error(e);
+    }
+}
 
-    goods = await res.json();
+async function fetchStock(goodsId) {
+    try {
+        const res = await fetch(
+            `/api/goods/${encodeURIComponent(goodsId)}/stock`,
+            { credentials: "same-origin" }
+        );
+        if (!res.ok) return null;
+        const data = await res.json();
+        return typeof data.stock === "number" ? data.stock : null;
+    } catch (e) {
+        console.error("fetchStock failed", e);
+        return null;
+    }
 }
 
 function filterOptions(input, selectId) {
-    const filter = input.value.toLowerCase().trim();
     const select = document.getElementById(selectId);
-
     if (!select) return;
+    filterSelect(input.value, select);
+}
+
+function filterGoods(input) {
+    const select = input.parentElement.querySelector("select.goods_select");
+    if (!select) return;
+    filterSelect(input.value, select);
+}
+
+function filterSelect(query, select) {
+    const needle = query.toLowerCase().trim();
+    let firstVisible = null;
 
     for (const option of select.options) {
-        const text = option.text.toLowerCase();
-        option.style.display = text.includes(filter) ? "" : "none";
+        const match = option.text.toLowerCase().includes(needle);
+        option.hidden = !match;
+        option.style.display = match ? "" : "none"; // fallback для старых браузеров
+        if (match && !firstVisible) firstVisible = option;
     }
 
-    const firstVisible = Array.from(select.options).find(
-        option => option.style.display !== "none"
-    );
-
-    if (firstVisible) {
+    if (firstVisible && select.selectedOptions[0]?.hidden) {
         select.value = firstVisible.value;
+        // Если это select товаров — подтянуть цену и остаток для нового выбора
+        if (select.classList.contains("goods_select")) {
+            goodsChanged(select);
+        }
     }
 }
 
 function addItem() {
-    let row = document.createElement("tr");
+    const row = document.createElement("tr");
 
-    row.innerHTML = `
-        <td>
-            <input
-                type="text"
-                placeholder="Поиск..."
-                oninput="filterGoods(this)"
-                class="border p-1 mb-1">
-            
-            <select
-                name="goods_id"
-                class="border p-1 goods_select"
-                onchange="goodsChanged(this)">
-            
-                ${goods.map(g => `<option value="${g.id}" data-price="${g.price}">${g.name}</option>`).join("")}
-            </select>
-        </td>
-        
-        <td>
-            <span class="stock">—</span>
-        </td>
-        
-        <td>
-            <input type="number" name="quantity" value="1" min="1"
-            oninput="updateRow(this)" class="border p-1 w-20">
-        </td>
-        
-        <td>
-            <input type="number" name="price"
-            step="0.01"
-            oninput="updateRow(this)"
-            class="border p-1 w-24">
-        </td>
-        
-        <td>
-            <input type="number" name="discount"
-            value="0"
-            step="0.01"
-            oninput="updateRow(this)"
-            class="border p-1 w-20">
-        </td>
-        
-        <td class="row_total">0</td>
-        
-        <td>
-            <button type="button" onclick="removeRow(this)">✕</button>
-        </td>
-    `;
+    const tdGoods = document.createElement("td");
 
+    const searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "Поиск...";
+    searchInput.className = "border p-1 mb-1";
+    searchInput.addEventListener("input", () => filterGoods(searchInput));
+
+    const select = document.createElement("select");
+    select.name = "goods_id";
+    select.className = "border p-1 goods_select";
+    select.required = true;
+    select.addEventListener("change", () => goodsChanged(select));
+
+    for (const g of goods) {
+        const opt = document.createElement("option");
+        opt.value = g.id;
+        opt.dataset.price = g.price;
+        opt.textContent = g.name;
+        select.appendChild(opt);
+    }
+
+    tdGoods.append(searchInput, select);
+
+    const tdStock = document.createElement("td");
+    const stockSpan = document.createElement("span");
+    stockSpan.className = "stock";
+    stockSpan.textContent = "—";
+    tdStock.appendChild(stockSpan);
+
+    const tdQty = document.createElement("td");
+    const qtyInput = document.createElement("input");
+    qtyInput.type = "number";
+    qtyInput.name = "quantity";
+    qtyInput.value = "1";
+    qtyInput.min = "1";
+    qtyInput.step = "1";
+    qtyInput.required = true;
+    qtyInput.className = "border p-1 w-20";
+    qtyInput.addEventListener("input", () => updateRow(qtyInput));
+    tdQty.appendChild(qtyInput);
+
+    const tdPrice = document.createElement("td");
+    const priceSpan = document.createElement("span");
+    priceSpan.className = "price";
+    priceSpan.textContent = "0.00";
+    tdPrice.appendChild(priceSpan);
+
+    const tdTotal = document.createElement("td");
+    tdTotal.className = "row_total";
+    tdTotal.dataset.value = "0";
+    tdTotal.textContent = "0.00";
+
+    const tdDel = document.createElement("td");
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.textContent = "✕";
+    delBtn.className = "px-2";
+    delBtn.addEventListener("click", () => removeRow(delBtn));
+    tdDel.appendChild(delBtn);
+
+    row.append(tdGoods, tdStock, tdQty, tdPrice, tdTotal, tdDel);
     document.getElementById("items").appendChild(row);
 
-    goodsChanged(row.querySelector("select"));
+    goodsChanged(select);
 }
 
 async function goodsChanged(select) {
-    let option = select.selectedOptions[0];
+    const row = select.closest("tr");
+    if (!row) return;
 
-    let price = option.dataset.price;
+    const option = select.selectedOptions[0];
+    if (!option) return;
 
-    let row = select.closest("tr");
+    const priceSpan = row.querySelector(".price");
+    const price = parseFloat(option.dataset.price) || 0;
+    priceSpan.textContent = price.toFixed(2);
 
-    row.querySelector("[name=price]").value = price;
+    const stockCell = row.querySelector(".stock");
+    stockCell.textContent = "…";
 
-    let goodsId = select.value;
-
-    let res = await fetch(`/api/goods/${goodsId}/stock`);
-
-    let data = await res.json();
-
-    let stock = data.stock;
-
-    let stockCell = row.querySelector(".stock");
-
-    stockCell.innerText = stock;
-
-    if (stock <= 0) {
-        row.style.backgroundColor = "#ffcccc";
-    } else {
+    const stock = await fetchStock(select.value);
+    if (stock === null) {
+        stockCell.textContent = "?";
         row.style.backgroundColor = "";
+    } else {
+        stockCell.textContent = String(stock);
+        row.style.backgroundColor = stock <= 0 ? "#ffcccc" : "";
     }
 
     updateRow(select);
 }
 
+function updateRow(el) {
+    const row = el.closest("tr");
+    if (!row) return;
+
+    const qty = parseInt(row.querySelector("[name=quantity]").value, 10) || 0;
+    const price = parseFloat(row.querySelector(".price").textContent) || 0;
+
+    const sum = qty * price;
+
+    const totalCell = row.querySelector(".row_total");
+    totalCell.dataset.value = sum.toFixed(2);
+    totalCell.textContent = sum.toFixed(2);
+
+    updateTotal();
+}
 
 function removeRow(btn) {
-    btn.closest("tr").remove();
-
+    const row = btn.closest("tr");
+    if (row) row.remove();
     updateTotal();
 }
-
-
-function updateRow(el) {
-    let row = el.closest("tr");
-
-    let qty = parseFloat(row.querySelector("[name=quantity]").value) || 0;
-
-    let price = parseFloat(row.querySelector("[name=price]").value) || 0;
-
-    let discount = parseFloat(row.querySelector("[name=discount]").value) || 0;
-
-    let sum = qty * price * (1 - discount / 100);
-
-    row.querySelector(".row_total").innerText = sum.toFixed(2);
-
-    updateTotal();
-}
-
 
 function updateTotal() {
     let total = 0;
-
-    document.querySelectorAll(".row_total").forEach(e => {
-        total += parseFloat(e.innerText) || 0;
+    document.querySelectorAll(".row_total").forEach((cell) => {
+        total += parseFloat(cell.dataset.value || cell.textContent) || 0;
     });
-
-    document.getElementById("total").innerText = total.toFixed(2);
+    const totalEl = document.getElementById("total");
+    if (totalEl) totalEl.textContent = total.toFixed(2);
 }
 
-
-function filterGoods(input) {
-    let filter = input.value.toLowerCase();
-
-    let select = input.nextElementSibling;
-
-    for (let o of select.options) {
-        o.style.display = o.text.toLowerCase().includes(filter) ? "" : "none";
+function showError(message) {
+    const result = document.getElementById("result");
+    if (!result) {
+        alert(message);
+        return;
     }
+    result.textContent = message;
+    result.className = "mt-4 text-red-500";
 }
 
+function todayLocalISO() {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+}
 
 document.addEventListener("DOMContentLoaded", async () => {
     await loadGoods();
 
-    document.getElementById("receipt_date").value =
-        new Date().toISOString().slice(0, 10);
+    const dateInput = document.getElementById("receipt_date");
+    if (dateInput && !dateInput.value) {
+        dateInput.value = todayLocalISO();
+    }
 
     addItem();
 });

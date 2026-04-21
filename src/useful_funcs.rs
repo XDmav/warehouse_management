@@ -6,7 +6,8 @@ use std::sync::Arc;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use html_escape::encode_safe;
-use tracing::log::{debug, trace};
+use sha2::{Digest, Sha256};
+use crate::app_error::AppResult;
 
 pub struct SharedStateStruct {
 	pub pool: PgPool,
@@ -21,22 +22,31 @@ pub async fn read_file_to_string(buf: &PathBuf) -> Result<String, Error> {
 	Ok(body)
 }
 
-pub async fn replace_text_in_html(body: String, tag: &str, val: &str) -> String {
+pub fn replace_text_in_html(body: String, tag: &str, val: &str) -> String {
 	let pattern = format!("<!--{{{tag}}}-->");
 	let safe = encode_safe(val);
 	body.replace(&pattern, safe.as_ref())
 }
 
-pub async fn replace_html_in_html(body: String, tag: &str, val: &str) -> String {
+pub fn replace_html_in_html(body: String, tag: &str, val: &str) -> String {
 	let pattern = format!("<!--{{{tag}}}-->");
 	body.replace(&pattern, val)
 }
 
+pub fn hash_cookie(cookie: &str) -> String {
+	let digest = Sha256::digest(cookie.as_bytes());
+	base16ct::lower::encode_string(&digest)
+}
+
 pub async fn get_user(jar: &CookieJar, state: &Arc<SharedStateStruct>) -> Option<i32> {
-	let cookie = jar.get("SECURITY-COOKIE")?.value();
+	let raw = jar.get("SECURITY-COOKIE")?.value();
+	let hash = hash_cookie(raw);
 	
-	let result = sqlx::query("SELECT user_id FROM web_page.cookies WHERE cookie = $1")
-		.bind(cookie)
+	let result = sqlx::query(
+		"SELECT user_id FROM web_page.cookies
+         WHERE cookie_hash = $1 AND expires_at > now()"
+	)
+		.bind(&hash)
 		.fetch_optional(&state.pool)
 		.await
 		.ok()??;
@@ -61,12 +71,10 @@ pub async fn check_permission(
 		.is_some()
 }
 
-pub async fn add_log_out(page: String, user_id: Option<i32>) -> String {
+pub async fn add_log_out(page: String, user_id: Option<i32>) -> AppResult<String> {
 	if user_id.is_some() {
-		let auth = read_file_to_string(&PathBuf::from("templates/auth.html"))
-			.await
-			.unwrap();
-		return replace_html_in_html(page, "auth", auth.as_ref()).await;
+		let auth = read_file_to_string(&PathBuf::from("templates/auth.html")).await?;
+		return Ok(replace_html_in_html(page, "auth", &auth));
 	}
-	page
+	Ok(page)
 }

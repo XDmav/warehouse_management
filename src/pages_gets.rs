@@ -1,117 +1,153 @@
-use axum::extract::State;
-use axum::response::{Html, IntoResponse, Redirect};
+use axum::extract::{Query, State};
+use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum_extra::extract::CookieJar;
 use sqlx::Row;
 use std::path::PathBuf;
 use std::sync::Arc;
+use serde::Deserialize;
+use html_escape::encode_safe;
+use crate::app_error::{AppError, AppResult};
 use crate::pages_gets::errors::unauthorized;
 use crate::useful_funcs::{check_permission, get_user, read_file_to_string, replace_html_in_html, replace_text_in_html, SharedStateStruct};
 
 pub mod errors;
 pub mod static_gets;
 
+#[derive(Deserialize)]
+pub struct AuthQuery {
+	error: Option<String>,
+	success: Option<String>,
+}
+
+fn login_error_message(code: Option<&str>) -> &'static str {
+	match code {
+		Some("invalid")    => "Неверный email или пароль",
+		Some("rate_limit") => "Слишком много попыток, попробуйте через 15 минут",
+		_ => "",
+	}
+}
+
+fn registration_error_message(code: Option<&str>) -> &'static str {
+	match code {
+		Some("invalid_email") => "Некорректный email",
+		Some("email_taken")   => "Этот email уже зарегистрирован",
+		Some("too_short")     => "Пароль должен быть не короче 12 символов",
+		Some("too_long")      => "Пароль слишком длинный (максимум 128 символов)",
+		Some("no_digit")      => "Пароль должен содержать хотя бы одну цифру",
+		Some("no_upper")      => "Пароль должен содержать хотя бы одну заглавную букву",
+		Some("no_lower")      => "Пароль должен содержать хотя бы одну строчную букву",
+		Some("no_special")    => "Пароль должен содержать хотя бы один спецсимвол",
+		_ => "",
+	}
+}
+
+fn registration_success_message(code: Option<&str>) -> &'static str {
+	match code {
+		Some(_) => "Пользователь успешно зарегистрирован",
+		None    => "",
+	}
+}
+
 pub async fn login(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>,
-) -> impl IntoResponse {
-	let user_id = get_user(&jar, &state).await;
-	if user_id.is_some() {
-		return Err(Redirect::to("/"));
+	Query(q): Query<AuthQuery>,
+) -> AppResult<Response> {
+	if get_user(&jar, &state).await.is_some() {
+		return Ok(Redirect::to("/").into_response());
 	}
-	Ok(Html(
-		read_file_to_string(&PathBuf::from("templates/login.html"))
-			.await
-			.unwrap(),
-	))
+	
+	let mut page = read_file_to_string(&PathBuf::from("templates/login.html")).await?;
+	
+	let error_text = login_error_message(q.error.as_deref());
+	page = replace_html_in_html(page, "error_message", error_text);
+	
+	Ok(Html(page).into_response())
 }
 
 pub async fn registration(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>,
-) -> impl IntoResponse {
-	let user_id = get_user(&jar, &state).await;
-	match user_id {
-		Some(user_id) => {
-			if check_permission(&state, user_id, "REG").await {
-				return Ok(Html(
-					read_file_to_string(&PathBuf::from("templates/registration.html"))
-						.await
-						.unwrap(),
-				));
-			}
-			Err(unauthorized(jar, State(state)).await.into_response())
-		}
-		None => Err(Redirect::to("/login").into_response()),
+	Query(q): Query<AuthQuery>,
+) -> AppResult<Response> {
+	let user_id = match get_user(&jar, &state).await {
+		Some(id) => id,
+		None => return Ok(Redirect::to("/login").into_response()),
+	};
+	
+	if !check_permission(&state, user_id, "REG").await {
+		return Ok(unauthorized(jar, State(state)).await.into_response());
 	}
+	
+	let mut page = read_file_to_string(&PathBuf::from("templates/registration.html")).await?;
+	
+	let error_text = registration_error_message(q.error.as_deref());
+	let success_text = registration_success_message(q.success.as_deref());
+	
+	page = replace_html_in_html(page, "error_message", error_text);
+	page = replace_html_in_html(page, "success_message", success_text);
+	
+	Ok(Html(page).into_response())
 }
 
 pub async fn home(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>,
-) -> impl IntoResponse {
+) -> AppResult<impl IntoResponse> {
 	let user_id = get_user(&jar, &state).await;
 	if user_id.is_none() {
-		return Err(Redirect::to("/login"));
+		return Ok(Redirect::to("/login").into_response());
 	}
-	Ok(Html(
-		read_file_to_string(&PathBuf::from("templates/index.html"))
-			.await
-			.unwrap(),
-	))
+	let body = read_file_to_string(&PathBuf::from("templates/index.html")).await?;
+	Ok(Html(body).into_response())
 }
 
 pub async fn stats(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>,
-) -> impl IntoResponse {
+) -> AppResult<impl IntoResponse> {
 	let user_id = get_user(&jar, &state).await;
 	if user_id.is_none() {
-		return Err(Redirect::to("/login"));
+		return Ok(Redirect::to("/login").into_response());
 	}
 	
-	let mut page = read_file_to_string(&PathBuf::from("templates/stats.html"))
-		.await
-		.unwrap();
+	let mut page = read_file_to_string(&PathBuf::from("templates/stats.html")).await?;
 	
 	let receipts: i64 = sqlx::query("SELECT COUNT(*) as count FROM receipts")
 		.fetch_one(&state.pool)
-		.await
-		.unwrap()
-		.get("count");
+		.await?
+		.try_get("count")
+		.map_err(|e| AppError::Internal(e.to_string()))?;
 	
-	let revenue: Option<f64> =
-		sqlx::query("SELECT SUM(quantity*price*(1-discount/100.0)) as sum FROM receipt_items")
-			.fetch_one(&state.pool)
-			.await
-			.unwrap()
-			.try_get("sum")
-			.ok();
+	let revenue: Option<f64> = sqlx::query("SELECT SUM(quantity*price*(1-discount/100.0)) as sum FROM receipt_items")
+		.fetch_one(&state.pool)
+		.await?
+		.try_get("sum")
+		.ok();
 	
 	let goods: i64 = sqlx::query("SELECT COUNT(*) as count FROM goods")
 		.fetch_one(&state.pool)
-		.await
-		.unwrap()
-		.get("count");
+		.await?
+		.try_get("count")
+		.map_err(|e| AppError::Internal(e.to_string()))?;
 	
-	page = replace_text_in_html(page, "receipts", &receipts.to_string()).await;
-	page = replace_text_in_html(page, "revenue", &format!("{:.2}", revenue.unwrap_or(0.0))).await;
-	page = replace_text_in_html(page, "goods", &goods.to_string()).await;
+	page = replace_text_in_html(page, "receipts", &receipts.to_string());
+	page = replace_text_in_html(page, "revenue", &format!("{:.2}", revenue.unwrap_or(0.0)));
+	page = replace_text_in_html(page, "goods", &goods.to_string());
 	
-	Ok(Html(page))
+	Ok(Html(page).into_response())
 }
 
 pub async fn stats_sales(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>,
-) -> impl IntoResponse {
+) -> AppResult<impl IntoResponse> {
 	let user_id = get_user(&jar, &state).await;
 	if user_id.is_none() {
-		return Err(Redirect::to("/login"));
+		return Ok(Redirect::to("/login").into_response());
 	}
 	
-	let mut page = read_file_to_string(&PathBuf::from("templates/stats_sales.html"))
-		.await
-		.unwrap();
+	let mut page = read_file_to_string(&PathBuf::from("templates/stats_sales.html")).await?;
 	
 	let rows = sqlx::query(
 		"SELECT g.name, SUM(ri.quantity) as sold
@@ -122,16 +158,15 @@ pub async fn stats_sales(
          LIMIT 10",
 	)
 		.fetch_all(&state.pool)
-		.await
-		.unwrap();
+		.await?;
 	
 	let mut list = String::new();
 	
 	for r in rows {
-		let name: String = r.get("name");
-		let sold: i64 = r.get("sold");
+		let name: String = r.try_get("name").map_err(|e| AppError::Internal(e.to_string()))?;
+		let sold: i64 = r.try_get("sold").map_err(|e| AppError::Internal(e.to_string()))?;
 		
-		list.push_str(&format!("<li>{} — {} шт.</li>", name, sold));
+		list.push_str(&format!("<li>{} — {} шт.</li>", encode_safe(name.as_str()), sold));
 	}
 	
 	let rows = sqlx::query(
@@ -145,16 +180,15 @@ pub async fn stats_sales(
 		LIMIT 12",
 	)
 		.fetch_all(&state.pool)
-		.await
-		.unwrap();
+		.await?;
 	
 	let mut monthly_stats = String::new();
 	
 	for r in rows {
-		let month: String = r.get("month");
-		let revenue: f64 = r.get("revenue");
+		let month: String = r.try_get("month").map_err(|e| AppError::Internal(e.to_string()))?;
+		let revenue: f64 = r.try_get("revenue").map_err(|e| AppError::Internal(e.to_string()))?;
 		
-		monthly_stats.push_str(&format!("<li>{} — {:.2}</li>", month, revenue));
+		monthly_stats.push_str(&format!("<li>{} — {:.2}</li>", encode_safe(month.as_str()), revenue));
 	}
 	
 	let avg_check: f64 = sqlx::query(
@@ -166,43 +200,41 @@ pub async fn stats_sales(
          ) t",
 	)
 		.fetch_one(&state.pool)
-		.await
-		.unwrap()
-		.get("avg");
+		.await?
+		.try_get("avg")
+		.map_err(|e| AppError::Internal(e.to_string()))?;
 	
 	let items_sold: i64 = sqlx::query("SELECT COALESCE(SUM(quantity),0) as sum FROM receipt_items")
 		.fetch_one(&state.pool)
-		.await
-		.unwrap()
-		.get("sum");
+		.await?
+		.try_get("sum")
+		.map_err(|e| AppError::Internal(e.to_string()))?;
 	
 	let orders_count: i64 = sqlx::query("SELECT COUNT(*) as count FROM orders")
 		.fetch_one(&state.pool)
-		.await
-		.unwrap()
-		.get("count");
+		.await?
+		.try_get("count")
+		.map_err(|e| AppError::Internal(e.to_string()))?;
 	
-	page = replace_html_in_html(page, "top_goods", &list).await;
-	page = replace_html_in_html(page, "monthly_revenue", &monthly_stats).await;
-	page = replace_text_in_html(page, "avg_check", &format!("{:.2}", avg_check)).await;
-	page = replace_text_in_html(page, "items_sold", &items_sold.to_string()).await;
-	page = replace_text_in_html(page, "orders_count", &orders_count.to_string()).await;
+	page = replace_html_in_html(page, "top_goods", &list);
+	page = replace_html_in_html(page, "monthly_revenue", &monthly_stats);
+	page = replace_text_in_html(page, "avg_check", &format!("{:.2}", avg_check));
+	page = replace_text_in_html(page, "items_sold", &items_sold.to_string());
+	page = replace_text_in_html(page, "orders_count", &orders_count.to_string());
 	
-	Ok(Html(page))
+	Ok(Html(page).into_response())
 }
 
 pub async fn stats_goods(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>,
-) -> impl IntoResponse {
+) -> AppResult<impl IntoResponse> {
 	let user_id = get_user(&jar, &state).await;
 	if user_id.is_none() {
-		return Err(Redirect::to("/login"));
+		return Ok(Redirect::to("/login").into_response());
 	}
 	
-	let mut page = read_file_to_string(&PathBuf::from("templates/stats_goods.html"))
-		.await
-		.unwrap();
+	let mut page = read_file_to_string(&PathBuf::from("templates/stats_goods.html")).await?;
 	
 	let rows = sqlx::query(
 	"SELECT
@@ -215,16 +247,15 @@ pub async fn stats_goods(
         LIMIT 10"
 	)
 		.fetch_all(&state.pool)
-		.await
-		.unwrap();
+		.await?;
 	
 	let mut list = String::new();
 	
 	for r in rows {
-		let name: String = r.get("name");
-		let revenue: f64 = r.get("revenue");
+		let name: String = r.try_get("name").map_err(|e| AppError::Internal(e.to_string()))?;
+		let revenue: f64 = r.try_get("revenue").map_err(|e| AppError::Internal(e.to_string()))?;
 		
-		list.push_str(&format!("<li>{} — {:.2}</li>", name, revenue));
+		list.push_str(&format!("<li>{} — {:.2}</li>", encode_safe(name.as_str()), revenue));
 	}
 	
 	if list.is_empty() {
@@ -268,22 +299,21 @@ pub async fn stats_goods(
         LIMIT 20"
 	)
 		.fetch_all(&state.pool)
-		.await
-		.unwrap();
+		.await?;
 	
 	let mut abc_list = String::new();
 	
 	for r in rows {
-		let name: String = r.get("name");
-		let revenue: f64 = r.get("revenue");
-		let share: f64 = r.get("share");
-		let cumulative_share: f64 = r.get("cumulative_share");
-		let category: String = r.get("category");
+		let name: String = r.try_get("name").map_err(|e| AppError::Internal(e.to_string()))?;
+		let revenue: f64 = r.try_get("revenue").map_err(|e| AppError::Internal(e.to_string()))?;
+		let share: f64 = r.try_get("share").map_err(|e| AppError::Internal(e.to_string()))?;
+		let cumulative_share: f64 = r.try_get("cumulative_share").map_err(|e| AppError::Internal(e.to_string()))?;
+		let category: String = r.try_get("category").map_err(|e| AppError::Internal(e.to_string()))?;
 		
 		abc_list.push_str(&format!(
 			"<li>[{}] {} — {:.2} (доля: {:.2}%, накопительно: {:.2}%)</li>",
-			category,
-			name,
+			encode_safe(category.as_str()),
+			encode_safe(name.as_str()),
 			revenue,
 			share * 100.0,
 			cumulative_share * 100.0
@@ -336,19 +366,18 @@ pub async fn stats_goods(
         LIMIT 10"
 	)
 		.fetch_all(&state.pool)
-		.await
-		.unwrap();
+		.await?;
 	
 	let mut falling_goods = String::new();
 	
 	for r in rows {
-		let name: String = r.get("name");
-		let current: i64 = r.get("current_month");
-		let prev: i64 = r.get("prev_month");
+		let name: String = r.try_get("name").map_err(|e| AppError::Internal(e.to_string()))?;
+		let current: i64 = r.try_get("current_month").map_err(|e| AppError::Internal(e.to_string()))?;
+		let prev: i64 = r.try_get("prev_month").map_err(|e| AppError::Internal(e.to_string()))?;
 		
 		falling_goods.push_str(&format!(
 			"<li>{} — {} → {}</li>",
-			name, prev, current
+			encode_safe(name.as_str()), prev, current
 		));
 	}
 	
@@ -358,180 +387,158 @@ pub async fn stats_goods(
 	
 	let goods_total: i64 = sqlx::query("SELECT COUNT(*) AS count FROM goods")
 		.fetch_one(&state.pool)
-		.await
-		.unwrap()
-		.get("count");
+		.await?
+		.try_get("count")
+		.map_err(|e| AppError::Internal(e.to_string()))?;
 	
-	let goods_with_sales: i64 =
-		sqlx::query("SELECT COUNT(DISTINCT goods_id) AS count FROM receipt_items")
-			.fetch_one(&state.pool)
-			.await
-			.unwrap()
-			.get("count");
+	let goods_with_sales: i64 = sqlx::query("SELECT COUNT(DISTINCT goods_id) AS count FROM receipt_items")
+		.fetch_one(&state.pool)
+		.await?
+		.try_get("count")
+		.map_err(|e| AppError::Internal(e.to_string()))?;
 	
 	let avg_price: f64 = sqlx::query("SELECT COALESCE(AVG(price)::float8, 0) AS avg FROM goods")
 		.fetch_one(&state.pool)
-		.await
-		.unwrap()
-		.get("avg");
+		.await?
+		.try_get("avg")
+		.map_err(|e| AppError::Internal(e.to_string()))?;
 	
-	page = replace_html_in_html(page, "goods_revenue", &list).await;
-	page = replace_html_in_html(page, "abc_goods", &abc_list).await;
-	page = replace_html_in_html(page, "falling_goods", &falling_goods).await;
-	page = replace_text_in_html(page, "goods_total", &goods_total.to_string()).await;
-	page = replace_text_in_html(page, "goods_with_sales", &goods_with_sales.to_string()).await;
-	page = replace_text_in_html(page, "avg_price", &format!("{:.2}", avg_price)).await;
+	page = replace_html_in_html(page, "goods_revenue", &list);
+	page = replace_html_in_html(page, "abc_goods", &abc_list);
+	page = replace_html_in_html(page, "falling_goods", &falling_goods);
+	page = replace_text_in_html(page, "goods_total", &goods_total.to_string());
+	page = replace_text_in_html(page, "goods_with_sales", &goods_with_sales.to_string());
+	page = replace_text_in_html(page, "avg_price", &format!("{:.2}", avg_price));
 	
-	Ok(Html(page))
+	Ok(Html(page).into_response())
 }
 
 pub async fn stats_warehouse(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>,
-) -> impl IntoResponse {
+) -> AppResult<impl IntoResponse> {
 	let user_id = get_user(&jar, &state).await;
 	if user_id.is_none() {
-		return Err(Redirect::to("/login"));
+		return Ok(Redirect::to("/login").into_response());
 	}
 	
-	let mut page = read_file_to_string(&PathBuf::from("templates/stats_warehouse.html"))
-		.await
-		.unwrap();
+	let mut page = read_file_to_string(&PathBuf::from("templates/stats_warehouse.html")).await?;
 	
 	let receipts: i64 = sqlx::query("SELECT COUNT(*) as count FROM goods_receipts")
 		.fetch_one(&state.pool)
-		.await
-		.unwrap()
-		.get("count");
+		.await?
+		.try_get("count")
+		.map_err(|e| AppError::Internal(e.to_string()))?;
 	
 	let writeoffs: i64 = sqlx::query("SELECT COUNT(*) as count FROM writeoff_acts")
 		.fetch_one(&state.pool)
-		.await
-		.unwrap()
-		.get("count");
+		.await?
+		.try_get("count")
+		.map_err(|e| AppError::Internal(e.to_string()))?;
 	
 	let stock_goods: i64 = sqlx::query("SELECT COALESCE(SUM(quantity),0) as count FROM warehouse_goods")
 		.fetch_one(&state.pool)
-		.await
-		.unwrap()
-		.get("count");
+		.await?
+		.try_get("count")
+		.map_err(|e| AppError::Internal(e.to_string()))?;
 	
 	let suppliers: i64 = sqlx::query("SELECT COUNT(*) as count FROM suppliers")
 		.fetch_one(&state.pool)
-		.await
-		.unwrap()
-		.get("count");
+		.await?
+		.try_get("count")
+		.map_err(|e| AppError::Internal(e.to_string()))?;
 	
 	let warehouses: i64 = sqlx::query("SELECT COUNT(*) as count FROM warehouses")
 		.fetch_one(&state.pool)
-		.await
-		.unwrap()
-		.get("count");
+		.await?
+		.try_get("count")
+		.map_err(|e| AppError::Internal(e.to_string()))?;
 	
-	page = replace_text_in_html(page, "receipts", &receipts.to_string()).await;
-	page = replace_text_in_html(page, "writeoffs", &writeoffs.to_string()).await;
-	page = replace_text_in_html(page, "stock_goods", &stock_goods.to_string()).await;
-	page = replace_text_in_html(page, "suppliers", &suppliers.to_string()).await;
-	page = replace_text_in_html(page, "warehouses", &warehouses.to_string()).await;
+	page = replace_text_in_html(page, "receipts", &receipts.to_string());
+	page = replace_text_in_html(page, "writeoffs", &writeoffs.to_string());
+	page = replace_text_in_html(page, "stock_goods", &stock_goods.to_string());
+	page = replace_text_in_html(page, "suppliers", &suppliers.to_string());
+	page = replace_text_in_html(page, "warehouses", &warehouses.to_string());
 	
-	Ok(Html(page))
+	Ok(Html(page).into_response())
 }
 
 pub async fn create_receipt_page(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>,
-) -> impl IntoResponse {
+) -> AppResult<impl IntoResponse> {
 	let user_id = get_user(&jar, &state).await;
 	match user_id {
 		Some(user_id) => {
 			if !check_permission(&state, user_id, "CREATE").await {
-				return Err(Redirect::to("/login"));
+				return Ok(Redirect::to("/login").into_response());
 			}
 		}
-		None => return Err(Redirect::to("/login")),
+		None => return Ok(Redirect::to("/login").into_response())
 	}
 	
-	let mut page = read_file_to_string(&PathBuf::from("templates/receipt_create.html"))
-		.await
-		.unwrap();
+	let mut page = read_file_to_string(&PathBuf::from("templates/receipt_create.html")).await?;
 	
 	let payment_rows = sqlx::query("SELECT payment_type FROM payment_types")
 		.fetch_all(&state.pool)
-		.await
-		.unwrap();
+		.await?;
 	
 	let mut payment_html = String::new();
 	
 	for r in payment_rows {
-		let p: String = r.get("payment_type");
+		let payment_type: String = r.try_get("payment_type").map_err(|e| AppError::Internal(e.to_string()))?;
+		let payment_type = encode_safe(payment_type.as_str());
 		
-		payment_html.push_str(&format!("<option value=\"{}\">{}</option>", p, p));
+		payment_html.push_str(&format!("<option value=\"{}\">{}</option>", payment_type, payment_type));
 	}
 	
 	let cashier_rows = sqlx::query("SELECT cashier_id,surname,first_name FROM cashiers")
 		.fetch_all(&state.pool)
-		.await
-		.unwrap();
+		.await?;
 	
 	let mut cashier_html = String::new();
 	
 	for r in cashier_rows {
-		let id: i64 = r.get("cashier_id");
-		let name: String = r.get("surname");
-		let fname: String = r.get("first_name");
+		let id: i64 = r.try_get("cashier_id").map_err(|e| AppError::Internal(e.to_string()))?;
+		let name: String = r.try_get("surname").map_err(|e| AppError::Internal(e.to_string()))?;
+		let fname: String = r.try_get("first_name").map_err(|e| AppError::Internal(e.to_string()))?;
 		
 		cashier_html.push_str(&format!(
 			"<option value=\"{}\">{} {}</option>",
-			id, name, fname
+			id, encode_safe(name.as_str()), encode_safe(fname.as_str())
 		));
 	}
 	
 	let delivery_rows = sqlx::query("SELECT delivery_type FROM delivery_types")
 		.fetch_all(&state.pool)
-		.await
-		.unwrap();
+		.await?;
 	
 	let mut delivery_html = String::new();
 	
 	for r in delivery_rows {
-		let d: String = r.get("delivery_type");
+		let delivery_type: String = r.try_get("delivery_type").map_err(|e| AppError::Internal(e.to_string()))?;
+		let delivery_type = encode_safe(delivery_type.as_str());
 		
-		delivery_html.push_str(&format!("<option value=\"{}\">{}</option>", d, d));
+		delivery_html.push_str(&format!("<option value=\"{}\">{}</option>", delivery_type, delivery_type));
 	}
 	
 	let store_rows = sqlx::query("SELECT store_id,address FROM stores")
 		.fetch_all(&state.pool)
-		.await
-		.unwrap();
+		.await?;
 	
 	let mut store_html = String::new();
 	
 	for r in store_rows {
-		let id: i64 = r.get("store_id");
-		let addr: String = r.get("address");
+		let id: i64 = r.try_get("store_id").map_err(|e| AppError::Internal(e.to_string()))?;
+		let addr: String = r.try_get("address").map_err(|e| AppError::Internal(e.to_string()))?;
 		
-		store_html.push_str(&format!("<option value=\"{}\">{}</option>", id, addr));
+		store_html.push_str(&format!("<option value=\"{}\">{}</option>", id, encode_safe(addr.as_str())));
 	}
 	
-	let goods_rows = sqlx::query("SELECT goods_id,name FROM goods ORDER BY name")
-		.fetch_all(&state.pool)
-		.await
-		.unwrap();
+	page = replace_html_in_html(page, "payment_types", &payment_html);
+	page = replace_html_in_html(page, "cashiers", &cashier_html);
+	page = replace_html_in_html(page, "delivery_types", &delivery_html);
+	page = replace_html_in_html(page, "stores", &store_html);
 	
-	let mut goods_html = String::new();
-	
-	for r in goods_rows {
-		let id: i64 = r.get("goods_id");
-		let name: String = r.get("name");
-		
-		goods_html.push_str(&format!("<option value=\"{}\">{}</option>", id, name));
-	}
-	
-	page = replace_text_in_html(page, "payment_types", &payment_html).await;
-	page = replace_text_in_html(page, "cashiers", &cashier_html).await;
-	page = replace_text_in_html(page, "delivery_types", &delivery_html).await;
-	page = replace_text_in_html(page, "stores", &store_html).await;
-	page = replace_text_in_html(page, "goods", &goods_html).await;
-	
-	Ok(Html(page))
+	Ok(Html(page).into_response())
 }
