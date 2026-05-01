@@ -2,6 +2,7 @@ use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Response};
 use std::fmt;
 
+#[derive(Debug)]
 pub enum AppError {
 	Db(sqlx::Error),
 	Io(std::io::Error),
@@ -41,22 +42,16 @@ impl IntoResponse for AppError {
 		tracing::error!("{}", self);
 		
 		let (status, msg): (StatusCode, &str) = match self {
-			AppError::NotFound        => (StatusCode::NOT_FOUND, "Not found"),
-			AppError::BadRequest(_)   => (StatusCode::BAD_REQUEST, "Bad request"),
-			AppError::Unauthorized    => (StatusCode::UNAUTHORIZED, "Unauthorized"),
+			AppError::NotFound      => (StatusCode::NOT_FOUND, "Not found"),
+			AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, "Bad request"),
+			AppError::Unauthorized  => (StatusCode::UNAUTHORIZED, "Unauthorized"),
 			AppError::Db(_)
 			| AppError::Io(_)
 			| AppError::PasswordHash(_)
-			| AppError::Internal(_)   => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
+			| AppError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
 		};
 		
-		match std::fs::read_to_string("templates/error.html") {
-			Ok(tpl) => {
-				let body = tpl.replace("<!--{error}-->", msg);
-				(status, Html(body)).into_response()
-			}
-			Err(_) => (status, msg.to_string()).into_response(),
-		}
+		(status, msg.to_string()).into_response()
 	}
 }
 

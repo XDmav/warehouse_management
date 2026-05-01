@@ -9,6 +9,7 @@ pub mod app_error;
 use axum::{http::StatusCode, middleware, routing::get, {serve, Router}};
 use sqlx::postgres::PgPoolOptions;
 use std::{sync::Arc, time::Duration};
+use std::time::Instant;
 use axum::routing::post;
 use tokio::{fs::File, io::AsyncReadExt, net::TcpListener};
 use tower::ServiceBuilder;
@@ -32,8 +33,9 @@ use crate::api::goods_list;
 use crate::auth_posts::logout;
 
 use tokio::signal;
-use tokio::time::{interval, MissedTickBehavior};
+use tokio::time::{interval, timeout, MissedTickBehavior};
 use tokio_util::sync::CancellationToken;
+use crate::useful_funcs::Templates;
 
 async fn shutdown_signal() {
 	let ctrl_c = async {
@@ -76,13 +78,19 @@ async fn main() {
 	let listen_addr = lines.next().expect("listen addr missing");
 	
 	let pool = PgPoolOptions::new()
-		.max_connections(32)
+		.max_connections(96)
 		.min_connections(2)
 		.acquire_timeout(Duration::from_secs(5))
 		.idle_timeout(Duration::from_secs(60))
 		.connect(url)
 		.await
 		.unwrap();
+	
+	sqlx::query("REFRESH MATERIALIZED VIEW v_abc_analysis")
+		.execute(&pool)
+		.await
+		.map_err(|e| tracing::warn!("Первичный refresh ABC не удался: {}", e))
+		.ok();
 	
 	let shutdown_token = CancellationToken::new();
 	
@@ -119,7 +127,49 @@ async fn main() {
 		}
 	});
 	
-	let shared_state = Arc::new(SharedStateStruct { pool: pool.clone() });
+	let refresh_handle = tokio::spawn({
+		let pool = pool.clone();
+		let token = shutdown_token.clone();
+		async move {
+			let mut interval = interval(Duration::from_secs(300));
+			interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+			interval.tick().await;
+			
+			loop {
+				tokio::select! {
+                _ = interval.tick() => {
+                    let start = Instant::now();
+                    let result = sqlx::query(
+                        "REFRESH MATERIALIZED VIEW CONCURRENTLY v_abc_analysis"
+                    )
+                    .execute(&pool)
+                    .await;
+
+                    match result {
+                        Ok(_) => tracing::info!(
+                            "ABC refresh выполнен за {:?}",
+                            start.elapsed()
+                        ),
+                        Err(e) => tracing::warn!("ABC refresh не удался: {}", e),
+                    }
+                }
+                _ = token.cancelled() => {
+                    tracing::info!("ABC refresh task: shutdown");
+                    break;
+                }
+            }
+			}
+		}
+	});
+	
+	let templates = Templates::load()
+		.await
+		.expect("Не удалось загрузить шаблоны при старте сервера");
+	
+	let shared_state = Arc::new(SharedStateStruct {
+		pool: pool.clone(),
+		templates,
+	});
 	
 	let login_governor = Arc::new(
 		GovernorConfigBuilder::default()
@@ -190,10 +240,16 @@ async fn main() {
 		tracing::error!("Server Error: {}", e);
 	}
 	
-	match tokio::time::timeout(Duration::from_secs(10), cleanup_handle).await {
+	match timeout(Duration::from_secs(10), cleanup_handle).await {
 		Ok(Ok(())) => tracing::info!("Cleanup task ended"),
 		Ok(Err(e)) => tracing::warn!("Cleanup task panicked: {}", e),
 		Err(_) => tracing::warn!("Cleanup task did not complete within 10 seconds"),
+	}
+	
+	match timeout(Duration::from_secs(10), refresh_handle).await {
+		Ok(Ok(())) => tracing::info!("ABC refresh task ended"),
+		Ok(Err(e)) => tracing::warn!("ABC refresh task panicked: {}", e),
+		Err(_) => tracing::warn!("ABC refresh task did not complete within 10 seconds"),
 	}
 	
 	pool.close().await;
