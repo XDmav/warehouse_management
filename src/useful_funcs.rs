@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use sqlx::PgPool;
@@ -63,13 +62,6 @@ pub fn hash_cookie(cookie: &str) -> String {
 	use sha2::{Digest, Sha256};
 	let digest = Sha256::digest(cookie.as_bytes());
 	base16ct::lower::encode_string(&digest)
-}
-
-pub async fn read_file_to_string(buf: &PathBuf) -> AppResult<String> {
-	let mut file = File::open(buf).await?;
-	let mut body = String::new();
-	file.read_to_string(&mut body).await?;
-	Ok(body)
 }
 
 pub fn replace_text_in_html(body: String, tag: &str, val: &str) -> String {
