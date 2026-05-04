@@ -29,14 +29,14 @@ pub async fn not_found(
 	render_error_page(&jar, &state, StatusCode::NOT_FOUND, "Not found").await
 }
 
-pub async fn bad_request(
+pub async fn _bad_request(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>,
 ) -> impl IntoResponse {
 	render_error_page(&jar, &state, StatusCode::BAD_REQUEST, "Bad request").await
 }
 
-pub async fn server_error(
+pub async fn _server_error(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>,
 ) -> impl IntoResponse {

@@ -128,3 +128,22 @@ pub fn add_log_out(page: String, user_id: Option<i32>, templates: &Templates) ->
 		page
 	}
 }
+
+pub async fn add_sidebar_links(
+	page: String,
+	user_id: i32,
+	state: &Arc<SharedStateStruct>,
+) -> String {
+	let create_link = if check_permission(state, user_id, "CREATE").await {
+		r#"<li class="mt-3 pb-3 border-b border-b-[rgb(85,85,95)] text-center"><a href="/receipts">Создание чека</a></li>"#
+	} else {
+		""
+	};
+	let registration_link = if check_permission(state, user_id, "REG").await {
+		r#"<li class="mt-3 pb-3 border-b border-b-[rgb(85,85,95)] text-center"><a href="/registration">Регистрация</a></li>"#
+	} else {
+		""
+	};
+	let page = replace_html_in_html(page, "create_link", create_link);
+	replace_html_in_html(page, "registration_link", registration_link)
+}

@@ -14,6 +14,8 @@
 	<link href="https://fonts.googleapis.com/css2?family=Moderustic:wght@300..800&display=swap" rel="stylesheet">
 	<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js"></script>
 	<script src="/static/js/csrf.js"></script>
+	<script>(function(){try{if(localStorage.getItem('theme')==='light')document.documentElement.classList.add('light');}catch(e){}})();</script>
+	<script src="/static/js/theme.js"></script>
 	<title>Warehouse management</title>
 </head>
 <body>
@@ -23,6 +25,7 @@
 		<img alt="Icon" class="top_image" src="/static/images/Icon.svg">
 		<span class="top_text">Управление складом</span>
 	</a>
+	<button class="theme_toggle mr-auto" id="theme_toggle_btn" onclick="toggleTheme()" type="button">☀️</button>
 </header>
 
 <div class="pt-20 p-8">

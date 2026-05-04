@@ -7,7 +7,7 @@ use serde::Deserialize;
 use html_escape::encode_safe;
 use crate::app_error::{AppError, AppResult};
 use crate::pages_gets::errors::unauthorized;
-use crate::useful_funcs::{check_permission, get_user, replace_html_in_html, replace_text_in_html, SharedStateStruct};
+use crate::useful_funcs::{add_sidebar_links, check_permission, get_user, replace_html_in_html, replace_text_in_html, SharedStateStruct};
 
 pub mod errors;
 pub mod static_gets;
@@ -20,7 +20,7 @@ pub struct AuthQuery {
 
 fn login_error_message(code: Option<&str>) -> &'static str {
 	match code {
-		Some("invalid")    => "Неверный email или пароль",
+		Some("invalid") => "Неверный email или пароль",
 		Some("rate_limit") => "Слишком много попыток, попробуйте через 15 минут",
 		_ => "",
 	}
@@ -29,13 +29,7 @@ fn login_error_message(code: Option<&str>) -> &'static str {
 fn registration_error_message(code: Option<&str>) -> &'static str {
 	match code {
 		Some("invalid_email") => "Некорректный email",
-		Some("email_taken")   => "Этот email уже зарегистрирован",
-		Some("too_short")     => "Пароль должен быть не короче 12 символов",
-		Some("too_long")      => "Пароль слишком длинный (максимум 128 символов)",
-		Some("no_digit")      => "Пароль должен содержать хотя бы одну цифру",
-		Some("no_upper")      => "Пароль должен содержать хотя бы одну заглавную букву",
-		Some("no_lower")      => "Пароль должен содержать хотя бы одну строчную букву",
-		Some("no_special")    => "Пароль должен содержать хотя бы один спецсимвол",
+		Some("email_taken") => "Этот email уже зарегистрирован",
 		_ => "",
 	}
 }
@@ -86,6 +80,8 @@ pub async fn registration(
 	page = replace_html_in_html(page, "error_message", error_text);
 	page = replace_html_in_html(page, "success_message", success_text);
 	
+	page = add_sidebar_links(page, user_id, &state).await;
+	
 	Ok(Html(page).into_response())
 }
 
@@ -93,20 +89,22 @@ pub async fn home(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>,
 ) -> AppResult<impl IntoResponse> {
-	if get_user(&jar, &state).await.is_none() {
-		return Ok(Redirect::to("/login").into_response());
-	}
-	Ok(Html(state.templates.index.to_string()).into_response())
+	let user_id = match get_user(&jar, &state).await {
+		Some(id) => id,
+		None => return Ok(Redirect::to("/login").into_response()),
+	};
+	let page = add_sidebar_links(state.templates.index.to_string(), user_id, &state).await;
+	Ok(Html(page).into_response())
 }
 
 pub async fn stats(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>,
 ) -> AppResult<impl IntoResponse> {
-	let user_id = get_user(&jar, &state).await;
-	if user_id.is_none() {
-		return Ok(Redirect::to("/login").into_response());
-	}
+	let user_id = match get_user(&jar, &state).await {
+		Some(id) => id,
+		None => return Ok(Redirect::to("/login").into_response()),
+	};
 	
 	let mut page = state.templates.stats.to_string();
 	let pool = &state.pool;
@@ -136,6 +134,8 @@ pub async fn stats(
 	page = replace_text_in_html(page, "revenue", &format!("{:.2}", revenue.unwrap_or(0.0)));
 	page = replace_text_in_html(page, "goods", &goods.to_string());
 	
+	page = add_sidebar_links(page, user_id, &state).await;
+	
 	Ok(Html(page).into_response())
 }
 
@@ -143,10 +143,10 @@ pub async fn stats_sales(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>,
 ) -> AppResult<impl IntoResponse> {
-	let user_id = get_user(&jar, &state).await;
-	if user_id.is_none() {
-		return Ok(Redirect::to("/login").into_response());
-	}
+	let user_id = match get_user(&jar, &state).await {
+		Some(id) => id,
+		None => return Ok(Redirect::to("/login").into_response()),
+	};
 	
 	let mut page = state.templates.stats_sales.to_string();
 	let pool = &state.pool;
@@ -225,6 +225,8 @@ pub async fn stats_sales(
 	page = replace_text_in_html(page, "items_sold", &items_sold.to_string());
 	page = replace_text_in_html(page, "orders_count", &orders_count.to_string());
 	
+	page = add_sidebar_links(page, user_id, &state).await;
+	
 	Ok(Html(page).into_response())
 }
 
@@ -232,10 +234,10 @@ pub async fn stats_goods(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>,
 ) -> AppResult<impl IntoResponse> {
-	let user_id = get_user(&jar, &state).await;
-	if user_id.is_none() {
-		return Ok(Redirect::to("/login").into_response());
-	}
+	let user_id = match get_user(&jar, &state).await {
+		Some(id) => id,
+		None => return Ok(Redirect::to("/login").into_response()),
+	};
 	
 	let mut page = state.templates.stats_goods.to_string();
 	let pool = &state.pool;
@@ -386,6 +388,8 @@ pub async fn stats_goods(
 	page = replace_text_in_html(page, "goods_with_sales", &goods_with_sales.to_string());
 	page = replace_text_in_html(page, "avg_price", &format!("{:.2}", avg_price));
 	
+	page = add_sidebar_links(page, user_id, &state).await;
+	
 	Ok(Html(page).into_response())
 }
 
@@ -393,10 +397,10 @@ pub async fn stats_warehouse(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>,
 ) -> AppResult<impl IntoResponse> {
-	let user_id = get_user(&jar, &state).await;
-	if user_id.is_none() {
-		return Ok(Redirect::to("/login").into_response());
-	}
+	let user_id = match get_user(&jar, &state).await {
+		Some(id) => id,
+		None => return Ok(Redirect::to("/login").into_response()),
+	};
 	
 	let mut page = state.templates.stats_warehouse.to_string();
 	let pool = &state.pool;
@@ -441,6 +445,8 @@ pub async fn stats_warehouse(
 	page = replace_text_in_html(page, "suppliers", &suppliers.to_string());
 	page = replace_text_in_html(page, "warehouses", &warehouses.to_string());
 	
+	page = add_sidebar_links(page, user_id, &state).await;
+	
 	Ok(Html(page).into_response())
 }
 
@@ -448,14 +454,13 @@ pub async fn create_receipt_page(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>,
 ) -> AppResult<impl IntoResponse> {
-	let user_id = get_user(&jar, &state).await;
-	match user_id {
-		Some(user_id) => {
-			if !check_permission(&state, user_id, "CREATE").await {
-				return Ok(Redirect::to("/login").into_response());
-			}
-		}
+	let user_id = match get_user(&jar, &state).await {
+		Some(id) => id,
 		None => return Ok(Redirect::to("/login").into_response()),
+	};
+	
+	if !check_permission(&state, user_id, "CREATE").await {
+		return Ok(Redirect::to("/login").into_response());
 	}
 	
 	let mut page = state.templates.receipt_create.to_string();
@@ -497,6 +502,8 @@ pub async fn create_receipt_page(
 	
 	page = replace_html_in_html(page, "payment_types", &payment_html);
 	page = replace_html_in_html(page, "cashiers", &cashier_html);
+	
+	page = add_sidebar_links(page, user_id, &state).await;
 	
 	Ok(Html(page).into_response())
 }
