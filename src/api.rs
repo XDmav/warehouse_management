@@ -71,3 +71,42 @@ pub async fn goods_list(
     
     Ok(Json(result))
 }
+
+#[derive(Serialize)]
+pub struct DiscountInfo {
+    goods_id: i64,
+    discount: f64,
+}
+
+pub async fn goods_discounts(
+    jar: CookieJar,
+    Path(card_number): Path<String>,
+    State(state): State<Arc<SharedStateStruct>>,
+) -> AppResult<impl IntoResponse> {
+    if get_user(&jar, &state).await.is_none() {
+        return Err(AppError::Unauthorized);
+    }
+    
+    if card_number.trim().is_empty() || card_number.len() > 64 {
+        return Err(AppError::BadRequest("Некорректный номер карты".into()));
+    }
+    
+    let rows = sqlx::query(
+        "SELECT goods_id, discount::float8 AS discount
+         FROM card_goods_discounts
+         WHERE card_number = $1",
+    )
+        .bind(&card_number)
+        .fetch_all(&state.pool)
+        .await?;
+    
+    let mut result = Vec::with_capacity(rows.len());
+    for r in rows {
+        result.push(DiscountInfo {
+            goods_id: r.try_get("goods_id").map_err(|e| AppError::Internal(e.to_string()))?,
+            discount: r.try_get("discount").map_err(|e| AppError::Internal(e.to_string()))?,
+        });
+    }
+    
+    Ok(Json(result))
+}

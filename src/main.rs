@@ -29,7 +29,7 @@ use pages_posts::create_receipt;
 use useful_funcs::SharedStateStruct;
 use api::goods_stock;
 use tower_governor::{GovernorLayer};
-use crate::api::goods_list;
+use crate::api::{goods_discounts, goods_list};
 use crate::auth_posts::logout;
 
 use tokio::signal;
@@ -193,6 +193,7 @@ async fn main() {
 		
 		.route("/api/goods/{goods_id}/stock", get(goods_stock))
 		.route("/api/goods", get(goods_list))
+		.route("/api/discounts/{card_number}", get(goods_discounts))
 		
 		.route("/static/images/{*name}", get(get_image))
 		.route("/static/css/dist/{*name}", get(get_style))

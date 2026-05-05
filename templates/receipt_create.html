@@ -138,6 +138,22 @@
 			</div>
 		</div>
 		
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+			<div>
+				<label class="block mb-2" for="card_number">Карта покупателя</label>
+				<input
+						class="border p-2 w-full"
+						id="card_number"
+						name="card_number"
+						type="text"
+						maxlength="64"
+						placeholder="Номер карты лояльности (необязательно)"
+						oninput="onCardInput(this)"
+				>
+				<div class="mt-1 text-sm opacity-70" id="card_status"></div>
+			</div>
+		</div>
+		
 		<div>
 			<h2 class="text-2xl mb-3">Товары</h2>
 			
@@ -149,6 +165,7 @@
 						<th class="p-2">Остаток</th>
 						<th class="p-2">Количество</th>
 						<th class="p-2">Цена</th>
+						<th class="p-2">Скидка</th>
 						<th class="p-2">Сумма</th>
 						<th class="p-2"></th>
 					</tr>

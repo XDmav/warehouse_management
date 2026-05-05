@@ -1,7 +1,9 @@
 "use strict";
 
-// Кэш списка товаров, загруженный с сервера
 let goods = [];
+let discounts = {};
+let discountFetchSeq = 0;
+let cardDebounceTimer = null;
 
 async function loadGoods() {
     try {
@@ -32,6 +34,68 @@ async function fetchStock(goodsId) {
     }
 }
 
+async function loadDiscounts(card) {
+    const trimmed = (card || "").trim();
+    const seq = ++discountFetchSeq;
+    const status = document.getElementById("card_status");
+
+    if (!trimmed) {
+        discounts = {};
+        if (status) status.textContent = "";
+        recomputeAllRows();
+        return;
+    }
+
+    if (status) status.textContent = "Загрузка…";
+
+    try {
+        const res = await fetch(
+            `/api/discounts/${encodeURIComponent(trimmed)}`,
+            { credentials: "same-origin" }
+        );
+        if (seq !== discountFetchSeq) return;
+
+        if (!res.ok) {
+            discounts = {};
+            if (status) status.textContent = "Не удалось получить скидки";
+            recomputeAllRows();
+            return;
+        }
+
+        const data = await res.json();
+        const map = {};
+        for (const d of data) {
+            map[String(d.goods_id)] = d.discount;
+        }
+        discounts = map;
+
+        if (status) {
+            const count = Object.keys(map).length;
+            status.textContent = count > 0
+                ? `Применено персональных скидок: ${count}`
+                : "Для этой карты нет скидок";
+        }
+
+        recomputeAllRows();
+    } catch (e) {
+        if (seq !== discountFetchSeq) return;
+        console.error("loadDiscounts failed", e);
+        discounts = {};
+        if (status) status.textContent = "Ошибка сети";
+        recomputeAllRows();
+    }
+}
+
+function onCardInput(input) {
+    clearTimeout(cardDebounceTimer);
+    cardDebounceTimer = setTimeout(() => loadDiscounts(input.value), 400);
+}
+
+function getDiscountFor(goodsId) {
+    const v = discounts[String(goodsId)];
+    return typeof v === "number" ? v : 0;
+}
+
 function filterOptions(input, selectId) {
     const select = document.getElementById(selectId);
     if (!select) return;
@@ -51,13 +115,12 @@ function filterSelect(query, select) {
     for (const option of select.options) {
         const match = option.text.toLowerCase().includes(needle);
         option.hidden = !match;
-        option.style.display = match ? "" : "none"; // fallback для старых браузеров
+        option.style.display = match ? "" : "none";
         if (match && !firstVisible) firstVisible = option;
     }
 
     if (firstVisible && select.selectedOptions[0]?.hidden) {
         select.value = firstVisible.value;
-        // Если это select товаров — подтянуть цену и остаток для нового выбора
         if (select.classList.contains("goods_select")) {
             goodsChanged(select);
         }
@@ -115,6 +178,13 @@ function addItem() {
     priceSpan.textContent = "0.00";
     tdPrice.appendChild(priceSpan);
 
+    const tdDiscount = document.createElement("td");
+    const discountSpan = document.createElement("span");
+    discountSpan.className = "discount";
+    discountSpan.dataset.value = "0";
+    discountSpan.textContent = "0%";
+    tdDiscount.appendChild(discountSpan);
+
     const tdTotal = document.createElement("td");
     tdTotal.className = "row_total";
     tdTotal.dataset.value = "0";
@@ -128,7 +198,7 @@ function addItem() {
     delBtn.addEventListener("click", () => removeRow(delBtn));
     tdDel.appendChild(delBtn);
 
-    row.append(tdGoods, tdStock, tdQty, tdPrice, tdTotal, tdDel);
+    row.append(tdGoods, tdStock, tdQty, tdPrice, tdDiscount, tdTotal, tdDel);
     document.getElementById("items").appendChild(row);
 
     goodsChanged(select);
@@ -141,9 +211,10 @@ async function goodsChanged(select) {
     const option = select.selectedOptions[0];
     if (!option) return;
 
-    const priceSpan = row.querySelector(".price");
     const price = parseFloat(option.dataset.price) || 0;
-    priceSpan.textContent = price.toFixed(2);
+    row.querySelector(".price").textContent = price.toFixed(2);
+
+    applyDiscountToRow(row, select.value);
 
     const stockCell = row.querySelector(".stock");
     stockCell.textContent = "…";
@@ -160,20 +231,37 @@ async function goodsChanged(select) {
     updateRow(select);
 }
 
+function applyDiscountToRow(row, goodsId) {
+    const discount = getDiscountFor(goodsId);
+    const span = row.querySelector(".discount");
+    span.dataset.value = String(discount);
+    span.textContent = `${discount.toFixed(2)}%`;
+}
+
 function updateRow(el) {
     const row = el.closest("tr");
     if (!row) return;
 
     const qty = parseInt(row.querySelector("[name=quantity]").value, 10) || 0;
     const price = parseFloat(row.querySelector(".price").textContent) || 0;
+    const discount = parseFloat(row.querySelector(".discount").dataset.value) || 0;
 
-    const sum = qty * price;
+    const sum = qty * price * (1 - discount / 100);
 
     const totalCell = row.querySelector(".row_total");
     totalCell.dataset.value = sum.toFixed(2);
     totalCell.textContent = sum.toFixed(2);
 
     updateTotal();
+}
+
+function recomputeAllRows() {
+    document.querySelectorAll("#items tr").forEach((row) => {
+        const select = row.querySelector("select.goods_select");
+        if (!select) return;
+        applyDiscountToRow(row, select.value);
+        updateRow(select);
+    });
 }
 
 function removeRow(btn) {
