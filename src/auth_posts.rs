@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+use std::ops::DerefMut;
 use argon2::{password_hash::PasswordHasher, Argon2, PasswordHash, PasswordVerifier};
 use axum::extract::State;
 use axum::response::{IntoResponse, Redirect};
@@ -14,7 +16,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use time::OffsetDateTime;
 use crate::app_error::{AppError, AppResult};
-use crate::useful_funcs::{check_permission, get_user, hash_cookie, SharedStateStruct};
+use crate::useful_funcs::{check_permission, get_user, hash_cookie, SharedStateStruct, ALL_PERMISSIONS};
 
 const DUMMY_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$ZHGJerRF83khoMUb52Jo2g$s7nwb02r25ThJjCCWgSEPmoWJVOUe3eD3QdfkBnitRM";
 
@@ -22,6 +24,14 @@ const DUMMY_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$ZHGJerRF83khoMUb52Jo2g$
 pub struct UserInfo {
 	email: String,
 	password: String,
+}
+
+#[derive(Deserialize)]
+pub struct RegistrationForm {
+	email: String,
+	password: String,
+	#[serde(default)]
+	permissions: Vec<String>,
 }
 
 pub async fn post_login(
@@ -106,8 +116,8 @@ pub async fn logout(
 pub async fn post_registration(
 	jar: CookieJar,
 	State(state): State<Arc<SharedStateStruct>>,
-	Form(payload): Form<UserInfo>,
-) -> impl IntoResponse {
+	Form(payload): Form<RegistrationForm>,
+) -> AppResult<impl IntoResponse> {
 	let user_id = get_user(&jar, &state)
 		.await
 		.ok_or(AppError::Unauthorized)?;
@@ -120,10 +130,15 @@ pub async fn post_registration(
 		return Ok(Redirect::to("/registration?error=invalid_email").into_response());
 	}
 	
-	let email = payload.email.trim().to_lowercase();
+	let valid: HashSet<&str> = ALL_PERMISSIONS.iter().map(|(c, _)| *c).collect();
+	let mut granted: Vec<String> = payload.permissions.into_iter()
+		.filter(|p| valid.contains(p.as_str()))
+		.collect();
+	granted.sort();
+	granted.dedup();
 	
 	let account = sqlx::query("SELECT user_id FROM web_page.users WHERE email = $1")
-		.bind(&email)
+		.bind(&payload.email)
 		.fetch_optional(&state.pool)
 		.await?;
 	
@@ -136,17 +151,35 @@ pub async fn post_registration(
 		.map_err(|e| AppError::Internal(format!("argon2 hash: {e}")))?
 		.to_string();
 	
-	let result = sqlx::query("INSERT INTO web_page.users(email, password_hash) VALUES ($1, $2)")
-		.bind(&email)
-		.bind(password_hash)
-		.execute(&state.pool)
+	let mut tx = state.pool.begin().await?;
+	
+	let new_user_row = sqlx::query(
+		"INSERT INTO web_page.users(email, password_hash) VALUES ($1, $2) RETURNING user_id"
+	)
+		.bind(&payload.email)
+		.bind(&password_hash)
+		.fetch_one(tx.deref_mut())
 		.await;
 	
-	match result {
-		Ok(_) => Ok(Redirect::to("/registration?success=1").into_response()),
+	let new_user_id: i32 = match new_user_row {
+		Ok(row) => row
+			.try_get("user_id")
+			.map_err(|e| AppError::Internal(format!("column 'user_id': {e}")))?,
 		Err(sqlx::Error::Database(db)) if db.is_unique_violation() => {
-			Ok(Redirect::to("/registration?error=email_taken").into_response())
+			return Ok(Redirect::to("/registration?error=email_taken").into_response());
 		}
-		Err(e) => Err(AppError::Db(e)),
+		Err(e) => return Err(AppError::Db(e)),
+	};
+	
+	for perm in &granted {
+		sqlx::query("INSERT INTO web_page.users_permissions(user_id, permission) VALUES ($1, $2)")
+			.bind(new_user_id)
+			.bind(perm)
+			.execute(tx.deref_mut())
+			.await?;
 	}
+	
+	tx.commit().await?;
+	
+	Ok(Redirect::to("/registration?success=1").into_response())
 }

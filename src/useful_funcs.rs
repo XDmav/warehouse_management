@@ -24,6 +24,11 @@ pub struct Templates {
 	pub error: Arc<str>,
 }
 
+pub const ALL_PERMISSIONS: &[(&str, &str)] = &[
+	("REG",    "Регистрация новых пользователей"),
+	("CREATE", "Создание чеков"),
+];
+
 impl Templates {
 	pub async fn load() -> AppResult<Self> {
 		async fn load_one(path: &str) -> AppResult<Arc<str>> {

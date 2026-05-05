@@ -7,7 +7,7 @@ use serde::Deserialize;
 use html_escape::encode_safe;
 use crate::app_error::{AppError, AppResult};
 use crate::pages_gets::errors::unauthorized;
-use crate::useful_funcs::{add_sidebar_links, check_permission, get_user, replace_html_in_html, replace_text_in_html, SharedStateStruct};
+use crate::useful_funcs::{add_sidebar_links, check_permission, get_user, replace_html_in_html, replace_text_in_html, SharedStateStruct, ALL_PERMISSIONS};
 
 pub mod errors;
 pub mod static_gets;
@@ -73,14 +73,19 @@ pub async fn registration(
 	}
 	
 	let mut page = state.templates.registration.to_string();
-	
 	let error_text = registration_error_message(q.error.as_deref());
 	let success_text = registration_success_message(q.success.as_deref());
 	
+	let mut perms_html = String::new();
+	for (code, label) in ALL_PERMISSIONS {
+		perms_html.push_str(&format!(
+			r#"<div class="mb-1"><label class="cursor-pointer inline-flex items-center"><input type="checkbox" name="permissions" value="{code}" class="mr-2">{label}</label></div>"#
+		));
+	}
+	
 	page = replace_html_in_html(page, "error_message", error_text);
 	page = replace_html_in_html(page, "success_message", success_text);
-	
-	page = add_sidebar_links(page, user_id, &state).await;
+	page = replace_html_in_html(page, "permissions", &perms_html);
 	
 	Ok(Html(page).into_response())
 }
