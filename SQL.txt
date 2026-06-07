@@ -1,0 +1,265 @@
+CREATE DOMAIN d_phone VARCHAR(20)
+CHECK (VALUE ~ '^\+?[0-9]{10,18}$');
+
+CREATE DOMAIN d_okpo CHAR(10)
+CHECK (VALUE ~ '^[0-9]{10}$');
+
+CREATE DOMAIN d_inn CHAR(12)
+CHECK (VALUE ~ '^[0-9]{12}$');
+
+CREATE DOMAIN d_bic CHAR(9)
+CHECK (VALUE ~ '^[0-9]{9}$');
+
+CREATE DOMAIN d_account CHAR(20)
+CHECK (VALUE ~ '^[0-9]{20}$');
+
+
+CREATE TABLE warehouses (
+    warehouse_code VARCHAR(100) PRIMARY KEY
+);
+
+CREATE TABLE organizations (
+    name VARCHAR(255) PRIMARY KEY,
+    warehouse_code VARCHAR(100) NOT NULL
+        REFERENCES warehouses(warehouse_code)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    okpo d_okpo UNIQUE,
+    sub_account VARCHAR(50) NOT NULL,
+    writeoff_account VARCHAR(50) NOT NULL
+);
+
+CREATE TABLE cities (
+    name VARCHAR(100) PRIMARY KEY
+);
+
+CREATE TABLE banks (
+    bic d_bic PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    account_number d_account UNIQUE
+);
+
+CREATE TABLE suppliers (
+    supplier_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    city VARCHAR(100) NOT NULL
+        REFERENCES cities(name)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    bic d_bic
+        REFERENCES banks(bic)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    inn d_inn UNIQUE,
+    legal_address TEXT NOT NULL,
+    phone d_phone UNIQUE
+);
+
+CREATE TABLE categories (
+    category VARCHAR(100) PRIMARY KEY
+);
+
+CREATE TABLE producers (
+    producer VARCHAR(150) PRIMARY KEY
+);
+
+CREATE TABLE goods (
+    goods_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    category VARCHAR(100) NOT NULL
+        REFERENCES categories(category)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    producer VARCHAR(150) NOT NULL
+        REFERENCES producers(producer)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    price NUMERIC(10,2) NOT NULL CHECK (price >= 0),
+    warranty_period INTERVAL,
+    nomenclature_number VARCHAR(100) UNIQUE NOT NULL,
+    production_year INTEGER CHECK (
+        production_year BETWEEN 1700 AND EXTRACT(YEAR FROM CURRENT_DATE)
+    )
+);
+
+CREATE TABLE goods_characteristics (
+    characteristic_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name VARCHAR(150) NOT NULL UNIQUE
+);
+
+CREATE TABLE goods_characteristic_values (
+    goods_id BIGINT NOT NULL
+        REFERENCES goods(goods_id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    characteristic_id BIGINT NOT NULL
+        REFERENCES goods_characteristics(characteristic_id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    value TEXT NOT NULL,
+    PRIMARY KEY (goods_id, characteristic_id)
+);
+
+CREATE TABLE warehouse_goods (
+    warehouse_code VARCHAR(100) NOT NULL
+        REFERENCES warehouses(warehouse_code)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    goods_id BIGINT NOT NULL
+        REFERENCES goods(goods_id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    quantity INTEGER NOT NULL CHECK (quantity >= 0),
+    PRIMARY KEY (warehouse_code, goods_id)
+);
+
+CREATE TABLE goods_receipts (
+    receipt_number VARCHAR(50) PRIMARY KEY,
+    receipt_date DATE NOT NULL,
+    supplier_id BIGINT NOT NULL
+        REFERENCES suppliers(supplier_id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    organization_name VARCHAR(255) NOT NULL
+        REFERENCES organizations(name)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+CREATE TABLE goods_receipt_items (
+    receipt_number VARCHAR(50) NOT NULL
+        REFERENCES goods_receipts(receipt_number)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    goods_id BIGINT NOT NULL
+        REFERENCES goods(goods_id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    PRIMARY KEY (receipt_number, goods_id)
+);
+
+CREATE TABLE writeoff_acts (
+    act_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    act_date DATE NOT NULL,
+    organization_name VARCHAR(255) NOT NULL
+        REFERENCES organizations(name)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+CREATE TABLE writeoff_act_items (
+    act_id BIGINT NOT NULL
+        REFERENCES writeoff_acts(act_id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    goods_id BIGINT NOT NULL
+        REFERENCES goods(goods_id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    requested INTEGER NOT NULL CHECK (requested >= 0),
+    released INTEGER NOT NULL CHECK (released >= 0),
+    PRIMARY KEY (act_id, goods_id)
+);
+
+CREATE TABLE payment_types (
+    payment_type VARCHAR(50) PRIMARY KEY
+);
+
+CREATE TABLE cashier_levels (
+    level VARCHAR(50) PRIMARY KEY
+);
+
+CREATE TABLE managers (
+    manager_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    first_name VARCHAR(100) NOT NULL,
+    surname VARCHAR(100) NOT NULL,
+    patronymic VARCHAR(100),
+    phone d_phone UNIQUE
+);
+
+CREATE TABLE cashiers (
+    cashier_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    cashier_level VARCHAR(50) NOT NULL
+        REFERENCES cashier_levels(level)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    manager_id BIGINT NOT NULL
+        REFERENCES managers(manager_id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    first_name VARCHAR(100) NOT NULL,
+    surname VARCHAR(100) NOT NULL,
+    patronymic VARCHAR(100)
+);
+
+CREATE TABLE delivery_types (
+    delivery_type VARCHAR(50) PRIMARY KEY
+);
+
+CREATE TABLE stores (
+    store_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    address TEXT NOT NULL,
+    warehouse_code VARCHAR(100)
+        REFERENCES warehouses(warehouse_code)
+        ON UPDATE CASCADE ON DELETE SET NULL
+);
+
+CREATE TABLE receipts (
+    receipt_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    receipt_date DATE NOT NULL,
+    payment_type VARCHAR(50) NOT NULL
+        REFERENCES payment_types(payment_type),
+    cashier_id BIGINT NOT NULL
+        REFERENCES cashiers(cashier_id),
+    delivery_type VARCHAR(50) NOT NULL
+        REFERENCES delivery_types(delivery_type),
+    store_id BIGINT
+        REFERENCES stores(store_id)
+);
+
+CREATE TABLE receipt_items (
+    receipt_id BIGINT NOT NULL
+        REFERENCES receipts(receipt_id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    goods_id BIGINT NOT NULL
+        REFERENCES goods(goods_id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    price NUMERIC(10,2) NOT NULL CHECK (price >= 0),
+    discount NUMERIC(5,2) DEFAULT 0 CHECK (discount BETWEEN 0 AND 100),
+    PRIMARY KEY (receipt_id, goods_id)
+);
+
+CREATE TABLE couriers (
+    courier_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    first_name VARCHAR(100) NOT NULL,
+    surname VARCHAR(100) NOT NULL,
+    patronymic VARCHAR(100)
+);
+
+CREATE TABLE customer_card (
+    card_number VARCHAR(50) PRIMARY KEY,
+    phone d_phone UNIQUE NOT NULL
+);
+
+CREATE TABLE orders (
+    order_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    courier_id BIGINT
+        REFERENCES couriers(courier_id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    card_number VARCHAR(50)
+        REFERENCES customer_card(card_number)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    receipt_id BIGINT
+        REFERENCES receipts(receipt_id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    delivery_date DATE NOT NULL,
+    delivery_address TEXT NOT NULL
+);
+
+CREATE TABLE reservations (
+    goods_id BIGINT NOT NULL
+        REFERENCES goods(goods_id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    card_number VARCHAR(50) NOT NULL
+        REFERENCES customer_card(card_number)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    warehouse_code VARCHAR(100) NOT NULL
+        REFERENCES warehouses(warehouse_code)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    end_date DATE NOT NULL,
+    PRIMARY KEY (goods_id, card_number, warehouse_code)
+);
+
+CREATE TABLE card_goods_discounts (
+    card_number VARCHAR(50) NOT NULL
+        REFERENCES customer_card(card_number)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    goods_id BIGINT NOT NULL
+        REFERENCES goods(goods_id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    discount NUMERIC(5,2) NOT NULL CHECK (discount BETWEEN 0 AND 100),
+    PRIMARY KEY (card_number, goods_id)
+);

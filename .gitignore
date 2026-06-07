@@ -2,4 +2,9 @@
 Cargo.lock
 Secret
 package-lock.json
+/node_modules
 /static/css/dist
+CLAUDE.md
+.git
+.claude
+.idea

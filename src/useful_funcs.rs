@@ -132,12 +132,12 @@ pub async fn add_sidebar_links(
 	state: &Arc<SharedStateStruct>,
 ) -> String {
 	let create_link = if check_permission(state, user_id, "CREATE").await {
-		r#"<li class="mt-3 pb-3 border-b border-b-[rgb(85,85,95)] text-center"><a href="/receipts">Создание чека</a></li>"#
+		r#"<li><a class="block px-5 py-2.5 text-[0.95rem] text-muted border-l-[3px] border-transparent hover:text-ink hover:bg-rowhover hover:border-accent" href="/receipts">Создание чека</a></li>"#
 	} else {
 		""
 	};
 	let registration_link = if check_permission(state, user_id, "REG").await {
-		r#"<li class="mt-3 pb-3 border-b border-b-[rgb(85,85,95)] text-center"><a href="/registration">Регистрация</a></li>"#
+		r#"<li><a class="block px-5 py-2.5 text-[0.95rem] text-muted border-l-[3px] border-transparent hover:text-ink hover:bg-rowhover hover:border-accent" href="/registration">Регистрация</a></li>"#
 	} else {
 		""
 	};

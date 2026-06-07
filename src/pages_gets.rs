@@ -79,7 +79,7 @@ pub async fn registration(
 	let mut perms_html = String::new();
 	for (code, label) in ALL_PERMISSIONS {
 		perms_html.push_str(&format!(
-			r#"<div class="mb-1"><label class="cursor-pointer inline-flex items-center"><input type="checkbox" name="permissions" value="{code}" class="mr-2">{label}</label></div>"#
+			r#"<div class="mb-2"><label class="inline-flex items-center gap-2 cursor-pointer text-sm"><input type="checkbox" name="permissions" value="{code}">{label}</label></div>"#
 		));
 	}
 	
@@ -471,7 +471,7 @@ pub async fn create_receipt_page(
 	let mut page = state.templates.receipt_create.to_string();
 	let pool = &state.pool;
 	
-	let (payment_rows, cashier_rows) = tokio::try_join!(
+	let (payment_rows, cashier_rows, delivery_rows, store_rows) = tokio::try_join!(
         async {
             sqlx::query("SELECT payment_type FROM payment_types")
                 .fetch_all(pool).await
@@ -479,6 +479,16 @@ pub async fn create_receipt_page(
         },
         async {
             sqlx::query("SELECT cashier_id, surname, first_name FROM cashiers")
+                .fetch_all(pool).await
+                .map_err(AppError::from)
+        },
+        async {
+            sqlx::query("SELECT delivery_type FROM delivery_types ORDER BY delivery_type")
+                .fetch_all(pool).await
+                .map_err(AppError::from)
+        },
+        async {
+            sqlx::query("SELECT store_id, address FROM stores ORDER BY address")
                 .fetch_all(pool).await
                 .map_err(AppError::from)
         },
@@ -504,9 +514,30 @@ pub async fn create_receipt_page(
 			encode_safe(first_name.as_str())
 		));
 	}
-	
+
+	let mut delivery_html = String::new();
+	for r in delivery_rows {
+		let delivery_type: String = r.try_get("delivery_type")
+			.map_err(|e| AppError::Internal(e.to_string()))?;
+		let delivery_type = encode_safe(delivery_type.as_str());
+		delivery_html.push_str(&format!("<option value=\"{}\">{}</option>", delivery_type, delivery_type));
+	}
+
+	let mut store_html = String::new();
+	for r in store_rows {
+		let id: i64 = r.try_get("store_id").map_err(|e| AppError::Internal(e.to_string()))?;
+		let address: String = r.try_get("address").map_err(|e| AppError::Internal(e.to_string()))?;
+		store_html.push_str(&format!(
+			"<option value=\"{}\">{}</option>",
+			id,
+			encode_safe(address.as_str())
+		));
+	}
+
 	page = replace_html_in_html(page, "payment_types", &payment_html);
 	page = replace_html_in_html(page, "cashiers", &cashier_html);
+	page = replace_html_in_html(page, "delivery_types", &delivery_html);
+	page = replace_html_in_html(page, "stores", &store_html);
 	
 	page = add_sidebar_links(page, user_id, &state).await;
 	

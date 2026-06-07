@@ -1,5 +1,8 @@
 "use strict";
 
+const ROW_FIELD = "w-full text-[0.95rem] text-ink bg-field border border-line rounded-md px-2.5 py-1.5 placeholder:text-muted focus:outline-none focus:border-accent";
+const ROW_CELL = "px-3.5 py-2.5 align-top";
+
 let goods = [];
 let discounts = {};
 let discountFetchSeq = 0;
@@ -131,16 +134,17 @@ function addItem() {
     const row = document.createElement("tr");
 
     const tdGoods = document.createElement("td");
+    tdGoods.className = ROW_CELL;
 
     const searchInput = document.createElement("input");
     searchInput.type = "text";
     searchInput.placeholder = "Поиск...";
-    searchInput.className = "border p-1 mb-1";
+    searchInput.className = ROW_FIELD + " mb-1.5";
     searchInput.addEventListener("input", () => filterGoods(searchInput));
 
     const select = document.createElement("select");
     select.name = "goods_id";
-    select.className = "border p-1 goods_select";
+    select.className = ROW_FIELD + " goods_select";
     select.required = true;
     select.addEventListener("change", () => goodsChanged(select));
 
@@ -155,12 +159,14 @@ function addItem() {
     tdGoods.append(searchInput, select);
 
     const tdStock = document.createElement("td");
+    tdStock.className = ROW_CELL;
     const stockSpan = document.createElement("span");
     stockSpan.className = "stock";
     stockSpan.textContent = "—";
     tdStock.appendChild(stockSpan);
 
     const tdQty = document.createElement("td");
+    tdQty.className = ROW_CELL;
     const qtyInput = document.createElement("input");
     qtyInput.type = "number";
     qtyInput.name = "quantity";
@@ -168,17 +174,19 @@ function addItem() {
     qtyInput.min = "1";
     qtyInput.step = "1";
     qtyInput.required = true;
-    qtyInput.className = "border p-1 w-20";
+    qtyInput.className = ROW_FIELD + " w-24";
     qtyInput.addEventListener("input", () => updateRow(qtyInput));
     tdQty.appendChild(qtyInput);
 
     const tdPrice = document.createElement("td");
+    tdPrice.className = ROW_CELL;
     const priceSpan = document.createElement("span");
     priceSpan.className = "price";
     priceSpan.textContent = "0.00";
     tdPrice.appendChild(priceSpan);
 
     const tdDiscount = document.createElement("td");
+    tdDiscount.className = ROW_CELL;
     const discountSpan = document.createElement("span");
     discountSpan.className = "discount";
     discountSpan.dataset.value = "0";
@@ -186,15 +194,16 @@ function addItem() {
     tdDiscount.appendChild(discountSpan);
 
     const tdTotal = document.createElement("td");
-    tdTotal.className = "row_total";
+    tdTotal.className = "row_total " + ROW_CELL;
     tdTotal.dataset.value = "0";
     tdTotal.textContent = "0.00";
 
     const tdDel = document.createElement("td");
+    tdDel.className = ROW_CELL;
     const delBtn = document.createElement("button");
     delBtn.type = "button";
     delBtn.textContent = "✕";
-    delBtn.className = "px-2";
+    delBtn.className = "text-danger px-2 cursor-pointer bg-transparent border-0";
     delBtn.addEventListener("click", () => removeRow(delBtn));
     tdDel.appendChild(delBtn);
 
@@ -222,10 +231,10 @@ async function goodsChanged(select) {
     const stock = await fetchStock(select.value);
     if (stock === null) {
         stockCell.textContent = "?";
-        row.style.backgroundColor = "";
+        row.classList.remove("bg-danger/15");
     } else {
         stockCell.textContent = String(stock);
-        row.style.backgroundColor = stock <= 0 ? "#ffcccc" : "";
+        row.classList.toggle("bg-danger/15", stock <= 0);
     }
 
     updateRow(select);
@@ -286,7 +295,7 @@ function showError(message) {
         return;
     }
     result.textContent = message;
-    result.className = "mt-4 text-red-500";
+    result.className = "text-danger text-sm";
 }
 
 function todayLocalISO() {
