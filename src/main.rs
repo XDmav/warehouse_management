@@ -173,7 +173,7 @@ async fn main() {
 	
 	let login_governor = Arc::new(
 		GovernorConfigBuilder::default()
-			.per_second(2)        // не чаще раза в 0.5 сек
+			.per_second(1)        // не чаще раза в 1 сек
 			.burst_size(5)        // пакет до 5
 			.key_extractor(tower_governor::key_extractor::SmartIpKeyExtractor)
 			.finish()
